@@ -1,0 +1,5 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+# .terraform.lock.hcl nên được commit — đảm bảo cả team dùng cùng provider version

@@ -34,19 +34,44 @@ resource "aws_launch_template" "app" {
   }
 }
 
-
 resource "aws_autoscaling_group" "app" {
-  name                = "${local.name_prefix}-asg"
-  vpc_zone_identifier = aws_subnet.private[*].id
-  desired_capacity    = 2
-  min_size            = 1
-  max_size            = 3
+  for_each = tomap({
+    "node-1" = aws_subnet.private[0].id
+    "node-2" = aws_subnet.private[1].id
+  })
 
-  target_group_arns = [aws_lb_target_group.app.arn]
-  health_check_type   = "ELB"
-  
+  name                = "${local.name_prefix}-asg-${each.key}"
+  vpc_zone_identifier = [each.value]
+  desired_capacity    = 1
+  min_size            = 1
+  max_size            = 1
+
+  # target_group_arns = [aws_lb_target_group.app.arn]
+  health_check_type   = "EC2"
+
   launch_template {
     id      = aws_launch_template.app.id
     version = "$Latest"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${local.name_prefix}-app-node-${each.key}"
+    propagate_at_launch = true
+  }
+  tag {
+    key                 = "Project"
+    value               = var.project
+    propagate_at_launch = true
+  }
+  tag {
+    key                 = "Environment"
+    value               = var.env
+    propagate_at_launch = true
+  }
+  tag {
+    key                 = "Role"
+    value               = "app"
+    propagate_at_launch = true
   }
 }

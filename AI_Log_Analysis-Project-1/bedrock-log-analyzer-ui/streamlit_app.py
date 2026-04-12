@@ -137,9 +137,11 @@ bedrock_model = st.sidebar.selectbox(
     "Bedrock Model",
     [
         "anthropic.claude-3-haiku-20240307-v1:0", 
-        "anthropic.claude-3-sonnet-20240229-v1:0"
+        "apac.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "apac.anthropic.claude-3-sonnet-20240229-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
     ],
-    help="Claude 3 Haiku (Siêu tốc độ, Khuyên dùng) và Claude 3 Sonnet (Cực kỳ thông minh nhưng tốn phí cao hơn)."
+    help="Dùng 'apac.' cho khu vực Singapore (ap-southeast-1) hoặc 'anthropic.claude-3-haiku' bản gốc. Haiku thường luôn chạy ổn trên on-demand."
 )
 
 # ============================================================
@@ -218,7 +220,9 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                     ai_context = preprocessor.prepare_ai_context(
                         entries=matches,
                         analysis=analysis,
-                        log_group_name=selected_log_group
+                        log_group_name=selected_log_group,
+                        search_term=search_term.strip(),
+                        time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}"
                     )
                     st.success(
                         f"✅ AI context ready — source: {ai_context.source_type}, "
@@ -401,15 +405,75 @@ else:
         st.subheader("Suggested Solutions")
         if result.solutions:
             for i, solution in enumerate(result.solutions, 1):
-                with st.expander(f"{solution.problem}"):
-                    if solution.ai_enhanced:
-                        st.markdown('<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                # If we have structural JSON from the new Bedrock prompt, render it layered
+                if solution.structured_solution:
+                    s_data = solution.structured_solution
+                    summary = s_data.get("summary", {})
+                    investigation = s_data.get("investigation", {})
+                    action_plan = s_data.get("action_plan", {})
                     
-                    st.write(f"**Components:** {', '.join(solution.affected_components)}")
-                    st.write(f"**Issue Type:** {solution.issue_type.value}")
-                    st.write(f"\n{solution.solution}")
-                    
-                    if hasattr(solution, 'tokens_used') and solution.tokens_used:
-                        st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
+                    with st.expander(f"🚨 {solution.problem}", expanded=True):
+                        st.markdown(f'<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
+                        
+                        # Tier 1: Summary Box
+                        severity = summary.get("severity", "Unknown")
+                        impact = summary.get("impact", "Unknown")
+                        st.error(f"**Severity:** {severity} | **Business Impact:** {impact}")
+                        
+                        if action_plan.get("immediate_containment"):
+                            st.warning(f"🔥 **Immediate Containment:** {action_plan.get('immediate_containment')}")
+                        if action_plan.get("next_best_command"):
+                            st.info(f"⚡ **Next Best Command to Verify:**\n```bash\n{action_plan.get('next_best_command')}\n```")
+                            
+                        # Tier 2: Investigation (Evidence & Inference)
+                        st.markdown("### 🔍 Investigation Details")
+                        inv_col1, inv_col2 = st.columns(2)
+                        with inv_col1:
+                            st.markdown("**Evidence From Logs**")
+                            for ev in investigation.get("evidence_from_logs", []):
+                                st.markdown(f"- {ev}")
+                        with inv_col2:
+                            st.markdown("**AI Inference**")
+                            for inf in investigation.get("inference", []):
+                                st.markdown(f"- {inf}")
+                                
+                        if investigation.get("why_not_other_causes"):
+                            st.markdown(f"**Alternative Causes Ruled Out:** {investigation.get('why_not_other_causes')}")
+                        if investigation.get("confidence"):
+                            st.caption(f"**Confidence:** {investigation.get('confidence')}")
+                            
+                        # Tier 3: Full Remediation
+                        st.markdown("### 🔧 Full Action Plan")
+                        verification = action_plan.get("verification_commands", [])
+                        if verification:
+                            st.markdown("**All Verification Steps:**")
+                            for cmd in verification:
+                                st.markdown(f"- `{cmd}`")
+                                
+                        fixes = action_plan.get("fix_steps", [])
+                        if fixes:
+                            st.markdown("**Fix Steps:**")
+                            for fx in fixes:
+                                st.markdown(f"- {fx}")
+                                
+                        if action_plan.get("prevention"):
+                            st.markdown(f"**Prevention Guidance:** {action_plan.get('prevention')}")
+                        
+                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
+                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
+                            
+                else:    
+                    # Legacy flat string rendering for fallback basic solutions
+                    with st.expander(f"{solution.problem}"):
+                        if solution.ai_enhanced:
+                            st.markdown('<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                        
+                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
+                        st.write(f"**Issue Type:** {solution.issue_type.value}")
+                        st.write(f"\n{solution.solution}")
+                        
+                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
+                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
         else:
             st.info("No solutions found")

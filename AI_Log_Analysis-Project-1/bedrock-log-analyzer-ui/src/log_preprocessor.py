@@ -28,6 +28,9 @@ class AIContext:
     total_logs_pulled: int                     # how many raw logs were retrieved
     total_logs_after_scoring: int              # how many passed relevance filter
 
+    search_term: str = ""                      # the key term used to extract these logs
+    time_range_str: str = ""                   # analysis boundary
+
     severity_summary: Dict[str, int] = field(default_factory=dict)
     top_patterns: List[Dict] = field(default_factory=list)        # [{pattern, count, component}]
     suspicious_ips: List[Dict] = field(default_factory=list)      # [{ip, count, context}]
@@ -218,7 +221,9 @@ class LogPreprocessor:
         self,
         entries: List[LogEntry],
         analysis: AnalysisData,
-        log_group_name: str
+        log_group_name: str,
+        search_term: str = "",
+        time_range_str: str = ""
     ) -> AIContext:
         """
         Build structured AIContext from parsed entries and pattern analysis.
@@ -279,6 +284,8 @@ class LogPreprocessor:
             log_group_name=log_group_name,
             total_logs_pulled=len(entries),
             total_logs_after_scoring=len([s for s, _ in scored if s >= 3]),
+            search_term=search_term,
+            time_range_str=time_range_str,
             severity_summary=severity_summary,
             top_patterns=top_patterns,
             suspicious_ips=suspicious_ips,
@@ -296,25 +303,57 @@ class LogPreprocessor:
         source_type: str
     ) -> List[str]:
         """
-        Pick representative log samples for the AI prompt.
-        Strategy: take the highest-scored entries, but avoid exact duplicates.
+        Pick representative log samples for the AI prompt using a diverse strategy.
+        Selects based on severity, actors, and patterns, adding 'Why' metadata.
         """
         seen_patterns = set()
         samples = []
-        for _score, entry in scored:
-            raw = (entry.content or '').strip()
-            if not raw:
-                continue
-            # Simple dedup: use first 80 chars as fingerprint
-            fingerprint = raw[:80]
-            if fingerprint in seen_patterns:
-                continue
-            seen_patterns.add(fingerprint)
-            # Truncate very long log lines for prompt efficiency
-            sample = raw if len(raw) <= 300 else raw[:300] + '...'
-            samples.append(sample)
-            if len(samples) >= self.max_samples:
-                break
+        
+        def _add_sample(entry_tuple_list, reason, quota):
+            count = 0
+            for score, entry in entry_tuple_list:
+                if count >= quota:
+                    break
+                raw = (entry.content or '').strip()
+                if not raw:
+                    continue
+                
+                # Enhanced dedup: normalize digits and IP-like structures
+                fingerprint = re.sub(r'\d+', '<NUM>', raw[:120])
+                if fingerprint in seen_patterns:
+                    continue
+                seen_patterns.add(fingerprint)
+                
+                # Truncate very long log lines for prompt efficiency
+                truncated = raw if len(raw) <= 350 else raw[:350] + '...<TRUNCATED>'
+                sample_text = f"[Selected because: {reason}] {truncated}"
+                samples.append(sample_text)
+                count += 1
+
+        # 1. High severity (Score >= 4)
+        high_sev = [(s, e) for s, e in scored if s >= 4]
+        _add_sample(high_sev, "Highest severity/Critical error", 3)
+        
+        # 2. Suspicious Actors (IPs or specific user ARNs based on keyword)
+        actors = []
+        for s, e in scored:
+            text = (e.content or '').lower() + (e.message or '').lower()
+            if re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text) or 'arn:aws:' in text or 'root' in text:
+                actors.append((s, e))
+        _add_sample(actors, "Contains suspicious actor (IP/User)", 2)
+        
+        # 3. Repeated Patterns (Score 2-3)
+        patterns = [(s, e) for s, e in scored if 2 <= s <= 3]
+        _add_sample(patterns, "Frequent error pattern", 2)
+        
+        # 4. Context / Baseline (Score 0-1)
+        context = [(s, e) for s, e in scored if s <= 1]
+        _add_sample(context, "Context / baseline activity", 1)
+        
+        # Fallback if we didn't fill the quota
+        if len(samples) < self.max_samples:
+            _add_sample(scored, "High relevance fallback", self.max_samples - len(samples))
+            
         return samples
 
     def _build_hints(

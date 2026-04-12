@@ -12,39 +12,6 @@ from models import Solution
 # Helpers
 # ---------------------------------------------------------------------------
 
-_DICT_KEY_LABELS = {
-    'suspected_root_cause': '🔍 Suspected Root Cause',
-    'root_cause': '🔍 Root Cause',
-    'affected_components': '🏗️ Affected Components',
-    'evidence_summary': '📋 Evidence Summary',
-    'evidence': '📋 Evidence',
-    'attack_pattern': '⚠️ Attack / Failure Pattern',
-    'failure_pattern': '⚠️ Failure Pattern',
-    'likely_attack_or_failure_pattern': '⚠️ Attack / Failure Pattern',
-    'remediation_steps': '🔧 Remediation Steps',
-    'remediation': '🔧 Remediation Steps',
-    'prevention_recommendations': '🛡️ Prevention Recommendations',
-    'prevention': '🛡️ Prevention Recommendations',
-    'confidence': '📊 Confidence / Rationale',
-    'rationale': '📊 Confidence / Rationale',
-}
-
-
-def _format_dict_solution(data: dict) -> str:
-    """Convert nested dict AI response into readable text for the UI."""
-    lines = []
-    for key, value in data.items():
-        label = _DICT_KEY_LABELS.get(key.lower(), key.replace('_', ' ').title())
-        lines.append(f"**{label}**")
-        if isinstance(value, list):
-            for item in value:
-                lines.append(f"  • {item}")
-        else:
-            lines.append(f"  {value}")
-        lines.append("")
-    return '\n'.join(lines)
-
-
 class BedrockEnhancer:
     """Enhance solutions using AWS Bedrock"""
     
@@ -74,7 +41,7 @@ class BedrockEnhancer:
         solutions: List[Solution], 
         log_examples: List[str] = None,
         ai_context = None,
-        max_batch_size: int = 5
+        max_batch_size: int = 1   # 1 issue per call prevents output truncation
     ) -> Tuple[List[Solution], Dict]:
         """
         Enhance solutions using AWS Bedrock
@@ -278,21 +245,46 @@ class BedrockEnhancer:
             prompt += f"   Current basic solution: {solution.solution}\n"
             prompt += f"   Affected components: {', '.join(solution.affected_components)}\n\n"
         
-        # Output format instruction
+        # Demo specific context
+        demo_mode_hint = ""
+        if ctx.source_type == 'vpc_flow':
+            demo_mode_hint = "Focus on network attacks: Port scanning, brute force attempts, unauthorized lateral movement."
+        elif ctx.source_type == 'cloudtrail':
+            demo_mode_hint = "Focus on IAM misuse: Privilege escalation, unauthorized resource deletion, stolen credentials."
+        else:
+            demo_mode_hint = "Focus on application failures: Resource exhaustion, crashes, failed authentications (e.g. JWT errors)."
+
         prompt += (
-            "For each issue, provide a comprehensive analysis with these 7 parts:\n"
-            "1. Suspected root cause\n"
-            "2. Affected component(s)\n"
-            "3. Evidence summary (reference specific log patterns, IPs, users, or APIs from above)\n"
-            "4. Likely attack or failure pattern (e.g., brute-force, privilege escalation, resource exhaustion)\n"
-            "5. Remediation steps (specific commands, AWS CLI, config changes)\n"
-            "6. Prevention recommendations\n"
-            "7. Brief confidence/rationale for your assessment\n\n"
-            "IMPORTANT: Return ONLY a raw JSON array. Do not include markdown code blocks, conversational filler, or headers. Output starts with [ and ends with ].\n"
+            "Based ONLY on the actual log data, patterns, IPs, users, APIs, and error messages provided above, "
+            "write a COMPREHENSIVE and SPECIFIC analysis for each issue.\n\n"
+            "Rules:\n"
+            "- Do NOT give generic advice. Every recommendation must reference actual values from the data above.\n"
+            "- If you saw IP 203.15.7.12 in the data, use that IP in your commands — not a placeholder.\n"
+            "- If you saw a specific user ARN, use that ARN in your commands.\n"
+            "- Adapt the commands to what the logs actually show — not what you assume the environment looks like.\n"
+            "- SEPARATE factual evidence from your own inference explicitly.\n"
+            f"- Scenario Strategy: {demo_mode_hint}\n\n"
+            "IMPORTANT: Return ONLY a raw JSON array. No markdown code blocks, no conversational text. Output MUST strictly match this JSON schema:\n"
             "[\n"
             "  {\n"
-            '    "problem": "original problem",\n'
-            '    "enhanced_solution": "your full 7-part analysis as formatted text"\n'
+            '    "problem": "exact original problem title",\n'
+            '    "summary": {\n'
+            '      "severity": "High / Medium / Low",\n'
+            '      "impact": "Brief description of components and business impact"\n'
+            '    },\n'
+            '    "investigation": {\n'
+            '      "evidence_from_logs": ["Specific log entry 1", "Specific log entry 2"],\n'
+            '      "inference": ["Deduction 1", "Deduction 2"],\n'
+            '      "why_not_other_causes": "Explanation of why alternatives were ruled out",\n'
+            '      "confidence": "Confirmed by logs | Strongly suggested | Possible but unconfirmed"\n'
+            '    },\n'
+            '    "action_plan": {\n'
+            '      "immediate_containment": "One key action to block damage immediately",\n'
+            '      "next_best_command": "The exact CLI command to run right now to verify",\n'
+            '      "verification_commands": ["cmd1", "cmd2"],\n'
+            '      "fix_steps": ["step 1", "step 2"],\n'
+            '      "prevention": "Architectural or policy change to prevent recurrence"\n'
+            '    }\n'
             "  }\n"
             "]\n"
         )
@@ -393,16 +385,17 @@ class BedrockEnhancer:
                     enhanced_solutions = []
                     for i, solution in enumerate(original_solutions):
                         if i < len(enhanced_data):
-                            raw_val = enhanced_data[i].get('enhanced_solution', solution.solution)
-                            # AI sometimes returns a nested dict instead of a string
-                            if isinstance(raw_val, dict):
-                                enhanced_text = _format_dict_solution(raw_val)
-                            elif isinstance(raw_val, list):
-                                enhanced_text = '\n'.join(str(v) for v in raw_val)
+                            raw_val = enhanced_data[i]
+                            # Store the structured dict nicely, and keep a backup string version for legacy
+                            if isinstance(raw_val, dict) and "summary" in raw_val:
+                                enhanced_text = "See Details"
+                                structured_data = raw_val
                             else:
-                                enhanced_text = str(raw_val)
+                                enhanced_text = str(raw_val.get('enhanced_solution', solution.solution))
+                                structured_data = None
                         else:
                             enhanced_text = solution.solution
+                            structured_data = None
                         
                         enhanced_solution = Solution(
                             problem=solution.problem,
@@ -411,7 +404,8 @@ class BedrockEnhancer:
                             affected_components=solution.affected_components,
                             ai_enhanced=True,
                             tokens_used=response.get('usage', {}).get('total_tokens', 0) // len(original_solutions),
-                            estimated_cost=self._calculate_cost(response.get('usage', {}).get('total_tokens', 0)) / len(original_solutions)
+                            estimated_cost=self._calculate_cost(response.get('usage', {}).get('total_tokens', 0)) / len(original_solutions),
+                            structured_solution=structured_data
                         )
                         enhanced_solutions.append(enhanced_solution)
                     
@@ -428,36 +422,82 @@ class BedrockEnhancer:
             print(f"[Bedrock Parse Error] Unexpected error: {e}")
             return original_solutions
     
+    def _fix_json_newlines(self, text: str) -> str:
+        """
+        Escape literal newlines/tabs inside JSON string values.
+        
+        When AI writes multi-line text directly inside a JSON string (without \\n),
+        the result is invalid JSON. This method walks through char-by-char,
+        tracking whether we are inside a string, and escapes bare newlines.
+        """
+        result = []
+        in_string = False
+        escape_next = False
+
+        for ch in text:
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                continue
+
+            if ch == '\\' and in_string:
+                result.append(ch)
+                escape_next = True
+                continue
+
+            if ch == '"':
+                in_string = not in_string
+                result.append(ch)
+                continue
+
+            if in_string:
+                if ch == '\n':
+                    result.append('\\n')
+                    continue
+                if ch == '\r':
+                    result.append('\\r')
+                    continue
+                if ch == '\t':
+                    result.append('\\t')
+                    continue
+
+            result.append(ch)
+
+        return ''.join(result)
+
     def _safe_json_loads(self, text: str):
         """
-        Try to parse JSON. If it fails (likely truncated output),
-        attempt to repair by closing open brackets/braces.
+        Try to parse JSON robustly.
+        Step 1: Fix literal newlines inside string values (most common AI mistake).
+        Step 2: Direct parse.
+        Step 3: If truncated, find last complete object and close the array.
         """
-        # Attempt 1: direct parse
+        # Step 1: Fix literal newlines inside JSON strings
+        fixed = self._fix_json_newlines(text)
+
+        # Step 2: Direct parse on fixed text
         try:
-            return json.loads(text)
+            return json.loads(fixed)
         except json.JSONDecodeError:
             pass
-        
-        # Attempt 2: response might be truncated — try closing open structures
-        repaired = text.rstrip()
-        # Remove any trailing incomplete string value
-        # Find last complete object by looking for last '}'
+
+        # Step 3: Response might be truncated — find last complete } and close ]
+        repaired = fixed.rstrip()
         last_brace = repaired.rfind('}')
         if last_brace > 0:
             repaired = repaired[:last_brace + 1]
-            # Close the array
             if not repaired.rstrip().endswith(']'):
                 repaired = repaired.rstrip().rstrip(',') + ']'
             try:
                 result = json.loads(repaired)
-                print(f"[Bedrock Parse] Successfully repaired truncated JSON ({len(result)} items)")
+                print(f"[Bedrock Parse] Repaired truncated JSON ({len(result)} items salvaged)")
                 return result
             except json.JSONDecodeError:
                 pass
-        
-        print(f"[Bedrock Parse] JSON repair failed. Raw: {text[:300]}")
+
+        print(f"[Bedrock Parse] All repair attempts failed. Raw snippet: {text[:300]}")
         return None
+
     
     def _calculate_cost(self, tokens: int) -> float:
         """Calculate estimated cost based on tokens"""

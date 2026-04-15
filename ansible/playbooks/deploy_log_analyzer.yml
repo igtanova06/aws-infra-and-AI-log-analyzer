@@ -1,6 +1,6 @@
 ---
 - name: Deploy Log Analyzer Application
-  hosts: all
+  hosts: app
   become: yes
   tasks:
     - name: Copy application source code to remote host
@@ -36,7 +36,7 @@
         restart_policy: unless-stopped
         recreate: yes
         ports:
-          - "80:8501"
+          - "80:{{ app_port }}"
         volumes:
           - /home/ec2-user/bedrock-log-analyzer-ui/.env:/app/.env:ro
       become_user: ec2-user

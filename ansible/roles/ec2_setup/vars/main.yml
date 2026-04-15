@@ -1,5 +1,3 @@
 ---
-db_host: "localhost"
-db_user: "admin"
-db_password: "securepassword"
-app_port: 80
+# You can define variables specific to the ec2_setup role here.
+# Leave empty if not needed, to avoid overriding global variables like app_port.

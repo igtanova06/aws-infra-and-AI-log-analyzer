@@ -1,6 +1,6 @@
 ---
 - name: Install Docker
-  hosts: all
+  hosts: app
   become: yes
   tasks:
     - name: Install required system packages

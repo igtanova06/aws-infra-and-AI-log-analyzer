@@ -46,7 +46,7 @@ resource "aws_autoscaling_group" "app" {
   min_size            = 1
   max_size            = 1
 
-  # target_group_arns = [aws_lb_target_group.app.arn]
+  target_group_arns = [aws_lb_target_group.app.arn]
   health_check_type   = "EC2"
 
   launch_template {

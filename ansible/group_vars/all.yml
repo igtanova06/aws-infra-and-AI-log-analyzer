@@ -1,0 +1,40 @@
+---
+# =============================================================
+# Biến mặc định dùng chung cho tất cả các hosts
+# =============================================================
+
+# --- AWS Configuration ---
+aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
+
+# --- Bedrock Configuration ---
+bedrock_model: "us.amazon.nova-micro-v1:0"
+max_tokens: 2000
+temperature: 0.3
+
+# --- Application Configuration ---
+app_port: 8501
+
+# --- Patch Management ---
+# Chỉ set true nếu bạn chủ động muốn apply security patches
+apply_security_patches: false
+
+# =============================================================
+# SECRETS MANAGEMENT - HƯỚNG DẪN
+# =============================================================
+# KHÔNG BAO GIỜ đặt mật khẩu hay API Key trực tiếp ở đây!
+#
+# Cách 1: Ansible Vault (đơn giản, phù hợp dự án nhỏ)
+#   Tạo file group_vars/all/vault.yml được mã hóa:
+#     $ ansible-vault create group_vars/all/vault.yml
+#   Trong file vault.yml đặt các biến nhạy cảm:
+#     vault_db_password: "supersecret123"
+#   Khi chạy playbook:
+#     $ ansible-playbook site.yml --ask-vault-pass
+#
+# Cách 2: AWS SSM Parameter Store (khuyên dùng trên AWS)
+#   Trong playbook hoặc template, dùng lookup:
+#     db_password: "{{ lookup('amazon.aws.aws_ssm', '/project1/dev/db_password') }}"
+#
+# Cách 3: AWS Secrets Manager (cho secrets phức tạp)
+#   db_password: "{{ lookup('amazon.aws.aws_secret', 'project1/db_credentials') }}"
+# =============================================================

@@ -6,10 +6,13 @@ regions:
 filters:
   instance-state-name: running
   "tag:Project": project1
-  "tag:Environment": dev
+  "tag:Environment": "{{ lookup('env', 'ENV_NAME') | default('dev', true) }}"
   "tag:Role": app
 
+# Hiển thị tag:Name trước, fallback sang private IP rồi instance-id
 hostnames:
+  - tag:Name
+  - private-ip-address
   - instance-id
 
 compose:

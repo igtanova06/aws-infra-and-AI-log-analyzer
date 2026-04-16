@@ -31,39 +31,38 @@ resource "aws_vpc_security_group_egress_rule" "alb_egress" {
   ip_protocol       = "-1"
 }
 
-# ── App SG — chỉ nhận từ ALB SG ─────────────────────────────────────
-resource "aws_security_group" "app" {
-  name        = "${local.name_prefix}-sg-app"
-  description = "Allow inbound from ALB SG only"
+# ── WEB TIER SG — nhận từ ALB ───────────────────────────────────
+resource "aws_security_group" "web" {
+  name        = "${local.name_prefix}-sg-web"
+  description = "Tier 1: Web presentation tier"
   vpc_id      = aws_vpc.main.id
 
-  tags = {
-    Name = "${local.name_prefix}-sg-app"
-  }
+  tags = { Name = "${local.name_prefix}-sg-web" }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
-  security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.alb.id
-  from_port                    = local.ports.app
-  to_port                      = local.ports.app
-  ip_protocol                  = "tcp"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "app_from_alb_8080" {
-  security_group_id            = aws_security_group.app.id
+resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
+  security_group_id            = aws_security_group.web.id
   referenced_security_group_id = aws_security_group.alb.id
   from_port                    = 8080
   to_port                      = 8080
   ip_protocol                  = "tcp"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "app_https_for_endpoints" {
-  security_group_id = aws_security_group.app.id
-  cidr_ipv4         = var.vpc_cidr  # Cho phép traffic HTTPS nội bộ VPC cho SSM Endpoints
-  from_port         = 443
-  to_port           = 443
-  ip_protocol       = "tcp"
+# ── APP TIER SG — CHỈ nhận từ WEB TIER ─────────────────────────────
+resource "aws_security_group" "app" {
+  name        = "${local.name_prefix}-sg-app"
+  description = "Tier 2: Application logic tier"
+  vpc_id      = aws_vpc.main.id
+
+  tags = { Name = "${local.name_prefix}-sg-app" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "app_from_web" {
+  security_group_id            = aws_security_group.app.id
+  referenced_security_group_id = aws_security_group.web.id
+  from_port                    = 80 # Log Analysis chạy ở port 80
+  to_port                      = 80
+  ip_protocol                  = "tcp"
 }
 
 resource "aws_vpc_security_group_egress_rule" "app_egress" {

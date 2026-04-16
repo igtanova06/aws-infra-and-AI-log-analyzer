@@ -50,6 +50,14 @@ resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
   ip_protocol                  = "tcp"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "app_from_alb_8080" {
+  security_group_id            = aws_security_group.app.id
+  referenced_security_group_id = aws_security_group.alb.id
+  from_port                    = 8080
+  to_port                      = 8080
+  ip_protocol                  = "tcp"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "app_https_for_endpoints" {
   security_group_id = aws_security_group.app.id
   cidr_ipv4         = var.vpc_cidr  # Cho phép traffic HTTPS nội bộ VPC cho SSM Endpoints

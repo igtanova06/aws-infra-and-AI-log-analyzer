@@ -13,7 +13,7 @@ resource "aws_lb" "alb" {
 }
 
 resource "aws_lb_target_group" "app" {
-	name     = "${local.name_prefix}-tg"
+	name_prefix     = "p1-tg-" # Tên ngắn lại để AWS thêm mã ngẫu nhiên vào sau
 	port     = local.ports.app
 	protocol = "HTTP"
 	target_type = "instance"
@@ -21,14 +21,18 @@ resource "aws_lb_target_group" "app" {
 
 	health_check {
 		enabled             = true
-		healthy_threshold   = 2
+		healthy_threshold   = 3
 		interval            = 30
-		matcher             = "200"
-		path                = "/"
+		matcher             = "200-399"
+		path                = "/_stcore/health"
 		port                = "traffic-port"
 		protocol            = "HTTP"
-		timeout             = 5
-		unhealthy_threshold = 2
+		timeout             = 10
+		unhealthy_threshold = 5
+	}
+
+	lifecycle {
+		create_before_destroy = true
 	}
 
 	tags = {
@@ -44,4 +48,57 @@ resource "aws_lb_listener" "app" {
 		type = "forward"
 		target_group_arn = aws_lb_target_group.app.arn
 	}
+}
+
+# ── Target Group cho Web App QLSV (Port 8080) ────────────────────────
+resource "aws_lb_target_group" "qlsv" {
+	name_prefix     = "qlsv-"
+	port     = 8080
+	protocol = "HTTP"
+	target_type = "instance"
+	vpc_id   = aws_vpc.main.id
+
+	health_check {
+		enabled             = true
+		healthy_threshold   = 3
+		interval            = 30
+		matcher             = "200-399"
+		path                = "/" # Web App PHP thường có index ở gốc
+		port                = "traffic-port"
+		protocol            = "HTTP"
+		timeout             = 10
+		unhealthy_threshold = 5
+	}
+
+	lifecycle {
+		create_before_destroy = true
+	}
+
+	tags = {
+		Name = "${local.name_prefix}-tg-qlsv"
+	}
+}
+
+# ── Điều hướng Path /qlsv/* về Web App QLSV ──────────────────────────
+resource "aws_lb_listener_rule" "qlsv" {
+  listener_arn = aws_lb_listener.app.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.qlsv.id
+  }
+
+  condition {
+    path_pattern {
+      values = ["/qlsv*", "/api/*", "/admin/*", "/student/*", "/lecturer/*", "/assets/*"]
+    }
+  }
+}
+
+# Gắn Target Group mới vào ASG
+resource "aws_autoscaling_attachment" "asg_attachment_qlsv" {
+  for_each               = aws_autoscaling_group.app
+  autoscaling_group_name = each.value.name
+  lb_target_group_arn    = aws_lb_target_group.qlsv.arn
 }

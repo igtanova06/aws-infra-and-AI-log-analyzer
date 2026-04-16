@@ -1,17 +1,17 @@
 data "aws_availability_zones" "available" {
-    state = "available"
+  state = "available"
 }
 
 variable "tags" {
   description = "Additional tags to merge"
   type        = map(string)
-  default     = {}  
+  default     = {}
 }
 
 locals {
-    name_prefix = "${var.project}-${var.env}-${var.region_short}"
-    ports = { http = 80, https = 443, app = 8051, db = 5432 }
+  name_prefix = "${var.project}-${var.env}-${var.region_short}"
+  ports       = { http = 80, https = 443, app = 80, db = 5432 }
 
-    azs = data.aws_availability_zones.available.names
+  azs = data.aws_availability_zones.available.names
 }
 

@@ -7,7 +7,6 @@ filters:
   instance-state-name: running
   "tag:Project": p1
   "tag:Environment": dev
-  "tag:Role": app
 
 # Hiển thị tag:Name trước, fallback sang private IP rồi instance-id
 hostnames:

@@ -26,7 +26,6 @@
         build:
           path: /home/ec2-user/bedrock-log-analyzer-ui
         force_source: yes
-      become_user: ec2-user
 
     - name: Run Log Analyzer UI container
       community.docker.docker_container:
@@ -39,4 +38,3 @@
           - "80:{{ app_port }}"
         volumes:
           - /home/ec2-user/bedrock-log-analyzer-ui/.env:/app/.env:ro
-      become_user: ec2-user

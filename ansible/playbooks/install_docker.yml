@@ -24,9 +24,11 @@
         groups: docker
         append: yes
 
-    - name: Install Python Docker SDK for Ansible docker modules
+    - name: Install Python Docker SDK and compatible libraries
       pip:
         name:
           - docker
           - docker-compose
+          - requests
+          - "urllib3<2.0.0"
         executable: pip3

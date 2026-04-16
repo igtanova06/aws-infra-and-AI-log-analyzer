@@ -27,17 +27,17 @@ resource "aws_launch_template" "web" {
   vpc_security_group_ids = [aws_security_group.web.id]
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "${local.name_prefix}-web-node" }
+    tags = { Name = "${local.name_prefix}-layer-1-web" }
   }
 }
 
 resource "aws_autoscaling_group" "web" {
   for_each = tomap({
-    "web-1" = aws_subnet.private[0].id
-    "web-2" = aws_subnet.private[1].id
+    "l1-node-1" = aws_subnet.private[0].id
+    "l1-node-2" = aws_subnet.private[1].id
   })
 
-  name                = "${local.name_prefix}-asg-${each.key}"
+  name                = "${local.name_prefix}-asg-layer-1-${each.key}"
   vpc_zone_identifier = [each.value]
   desired_capacity    = 1
   min_size            = 1
@@ -55,28 +55,33 @@ resource "aws_autoscaling_group" "web" {
     value               = "${local.name_prefix}-${each.key}"
     propagate_at_launch = true
   }
+  tag {
+    key                 = "Role"
+    value               = "web"
+    propagate_at_launch = true
+  }
 }
 
-# ── APP TIER (Logic - Log Analysis) ─────────────────────────────
+# ── LAYER 2: APP TIER (Logic - Log Analysis) ─────────────────────
 resource "aws_launch_template" "app" {
-  name_prefix   = "${local.name_prefix}-app-lt-"
+  name_prefix   = "${local.name_prefix}-l2-lt-"
   image_id      = data.aws_ami.amazon_linux.id
   instance_type = "t3.micro"
   iam_instance_profile { name = aws_iam_instance_profile.ec2_instance_profile.name }
   vpc_security_group_ids = [aws_security_group.app.id]
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "${local.name_prefix}-app-node" }
+    tags = { Name = "${local.name_prefix}-layer-2-app" }
   }
 }
 
 resource "aws_autoscaling_group" "app" {
   for_each = tomap({
-    "app-1" = aws_subnet.private[0].id
-    "app-2" = aws_subnet.private[1].id
+    "l2-node-1" = aws_subnet.private[0].id
+    "l2-node-2" = aws_subnet.private[1].id
   })
 
-  name                = "${local.name_prefix}-asg-${each.key}"
+  name                = "${local.name_prefix}-asg-layer-2-${each.key}"
   vpc_zone_identifier = [each.value]
   desired_capacity    = 1
   min_size            = 1
@@ -92,6 +97,11 @@ resource "aws_autoscaling_group" "app" {
   tag {
     key                 = "Name"
     value               = "${local.name_prefix}-${each.key}"
+    propagate_at_launch = true
+  }
+  tag {
+    key                 = "Role"
+    value               = "app"
     propagate_at_launch = true
   }
 }

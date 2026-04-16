@@ -31,13 +31,13 @@ resource "aws_vpc_security_group_egress_rule" "alb_egress" {
   ip_protocol       = "-1"
 }
 
-# ── WEB TIER SG — nhận từ ALB ───────────────────────────────────
+# ── LAYER 1: WEB APP SG (Nhận từ ALB) ───────────────────────────────────
 resource "aws_security_group" "web" {
   name        = "${local.name_prefix}-sg-web"
-  description = "Tier 1: Web presentation tier"
+  description = "Layer 1: External Facing Web App"
   vpc_id      = aws_vpc.main.id
 
-  tags = { Name = "${local.name_prefix}-sg-web" }
+  tags = { Name = "${local.name_prefix}-sg-layer-1" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
@@ -48,19 +48,19 @@ resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
   ip_protocol                  = "tcp"
 }
 
-# ── APP TIER SG — CHỈ nhận từ WEB TIER ─────────────────────────────
+# ── LAYER 2: LOG ANALYSIS SG (CHỈ nhận từ LAYER 1) ──────────────────────
 resource "aws_security_group" "app" {
   name        = "${local.name_prefix}-sg-app"
-  description = "Tier 2: Application logic tier"
+  description = "Layer 2: Internal Log Analysis Logic"
   vpc_id      = aws_vpc.main.id
 
-  tags = { Name = "${local.name_prefix}-sg-app" }
+  tags = { Name = "${local.name_prefix}-sg-layer-2" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "app_from_web" {
   security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.web.id
-  from_port                    = 80 # Log Analysis chạy ở port 80
+  referenced_security_group_id = aws_security_group.web.id # Chỉ cho phép Layer 1 gọi vào
+  from_port                    = 80
   to_port                      = 80
   ip_protocol                  = "tcp"
 }

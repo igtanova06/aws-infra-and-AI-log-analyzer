@@ -1,6 +1,6 @@
 ---
 - name: Deploy Student Management Web App
-  hosts: aws_ec2
+  hosts: tag_Role_web
   become: yes
   vars:
     app_name: student-management-app

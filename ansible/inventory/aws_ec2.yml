@@ -5,7 +5,7 @@ regions:
 
 filters:
   instance-state-name: running
-  "tag:Project": project1
+  "tag:Project": p1
   "tag:Environment": dev
   "tag:Role": app
 

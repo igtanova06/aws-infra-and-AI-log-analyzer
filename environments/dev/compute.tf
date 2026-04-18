@@ -24,7 +24,7 @@ resource "aws_launch_template" "web" {
   image_id      = data.aws_ami.amazon_linux.id
   instance_type = "t3.micro"
   iam_instance_profile { name = aws_iam_instance_profile.ec2_instance_profile.name }
-  vpc_security_group_ids = [aws_security_group.web.id]
+  vpc_security_group_ids = [aws_security_group.web.id, aws_security_group.ssm_endpoints.id] # Gán thêm SG SSM
   tag_specifications {
     resource_type = "instance"
     tags = { Name = "${local.name_prefix}-layer-1-web" }
@@ -68,7 +68,7 @@ resource "aws_launch_template" "app" {
   image_id      = data.aws_ami.amazon_linux.id
   instance_type = "t3.micro"
   iam_instance_profile { name = aws_iam_instance_profile.ec2_instance_profile.name }
-  vpc_security_group_ids = [aws_security_group.app.id]
+  vpc_security_group_ids = [aws_security_group.app.id, aws_security_group.ssm_endpoints.id] # Gán thêm SG SSM
   tag_specifications {
     resource_type = "instance"
     tags = { Name = "${local.name_prefix}-layer-2-app" }

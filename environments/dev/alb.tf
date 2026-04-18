@@ -97,9 +97,4 @@ resource "aws_lb_listener_rule" "qlsv" {
   }
 }
 
-# Gắn Target Group mới vào ASG
-resource "aws_autoscaling_attachment" "asg_attachment_qlsv" {
-  for_each               = aws_autoscaling_group.app
-  autoscaling_group_name = each.value.name
-  lb_target_group_arn    = aws_lb_target_group.qlsv.arn
-}
+# Gắn Target Group mới vào ASG

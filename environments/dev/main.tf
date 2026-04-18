@@ -132,7 +132,7 @@ resource "aws_vpc_endpoint" "ssm" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.ssm"
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.app.id, aws_security_group.web.id] # Cho phép cả 2 tầng
+  security_group_ids  = [aws_security_group.ssm_endpoints.id] # Sửa thành SG SSM Endpoints
   subnet_ids          = aws_subnet.private[*].id
   private_dns_enabled = true
 }
@@ -142,7 +142,7 @@ resource "aws_vpc_endpoint" "ssmmessages" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.ssmmessages"
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.app.id]
+  security_group_ids  = [aws_security_group.ssm_endpoints.id] # Sửa thành SG SSM Endpoints
   subnet_ids          = aws_subnet.private[*].id
   private_dns_enabled = true
 }
@@ -152,7 +152,7 @@ resource "aws_vpc_endpoint" "ec2messages" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.ec2messages"
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.app.id, aws_security_group.web.id]
+  security_group_ids  = [aws_security_group.ssm_endpoints.id]
   subnet_ids          = aws_subnet.private[*].id
   private_dns_enabled = true
 }

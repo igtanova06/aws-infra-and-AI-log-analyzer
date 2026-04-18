@@ -1,6 +1,6 @@
 ---
 - name: Deploy Log Analyzer Application
-  hosts: tag_Role_app
+  hosts: role_app
   become: yes
   tasks:
     - name: Copy application source code to remote host

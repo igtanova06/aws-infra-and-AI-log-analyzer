@@ -65,14 +65,28 @@ resource "aws_vpc_security_group_ingress_rule" "app_from_web" {
   ip_protocol                  = "tcp"
 }
 
-# QUAN TRỌNG: Cho phép máy EC2 tự nói chuyện với VPC Endpoints qua cổng 443
-resource "aws_vpc_security_group_ingress_rule" "allow_ssm_endpoint_https" {
-  for_each          = tomap({ "web" = aws_security_group.web.id, "app" = aws_security_group.app.id })
-  security_group_id = each.value
+# ── SSM ENDPOINTS SG (Cổng dùng chung cho tất cả các máy kết nối SSM) ──
+resource "aws_security_group" "ssm_endpoints" {
+  name        = "${local.name_prefix}-sg-ssm-endpoints"
+  description = "Access to SSM Endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  tags = { Name = "${local.name_prefix}-sg-ssm-endpoints" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ssm_endpoints_https" {
+  security_group_id = aws_security_group.ssm_endpoints.id
   cidr_ipv4         = var.vpc_cidr
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
+}
+
+# ── EGRESS RULES (Cho phép máy chủ đi ra ngoài) ─────────────────────────
+resource "aws_vpc_security_group_egress_rule" "web_egress" {
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
 }
 
 resource "aws_vpc_security_group_egress_rule" "app_egress" {

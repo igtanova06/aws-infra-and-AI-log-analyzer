@@ -26,6 +26,8 @@
         build:
           path: /home/ec2-user/bedrock-log-analyzer-ui
         force_source: yes
+      async: 900
+      poll: 10
 
     - name: Run Log Analyzer UI container
       community.docker.docker_container:

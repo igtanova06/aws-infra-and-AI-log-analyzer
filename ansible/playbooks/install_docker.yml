@@ -24,6 +24,16 @@
         groups: docker
         append: yes
 
+    - name: Check internet connectivity
+      command: ping -c 3 google.com
+      register: ping_test
+      ignore_errors: yes
+
+    - name: Fail if no internet access
+      fail:
+        msg: "Máy chủ không thể kết nối Internet (Kiểm tra NAT Gateway!)."
+      when: ping_test.rc != 0
+
     - name: Install Python Docker SDK and compatible libraries
       pip:
         name:
@@ -32,3 +42,8 @@
           - requests
           - "urllib3<2.0.0"
         executable: pip3
+      register: pip_result
+
+    - name: Debug pip result
+      debug:
+        var: pip_result

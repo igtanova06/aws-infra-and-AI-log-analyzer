@@ -30,6 +30,8 @@
           path: "/home/ec2-user/{{ app_name }}"
         source: build
         state: present
+      async: 900
+      poll: 10
 
     - name: Run PHP Web App container
       community.docker.docker_container:

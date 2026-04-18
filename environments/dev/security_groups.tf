@@ -57,9 +57,9 @@ resource "aws_security_group" "app" {
   tags = { Name = "${local.name_prefix}-sg-layer-2" }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "app_from_web" {
+resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
   security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.web.id # Chỉ cho phép Layer 1 gọi vào
+  referenced_security_group_id = aws_security_group.alb.id # Cho phép ALB gọi vào trực tiếp
   from_port                    = 80
   to_port                      = 80
   ip_protocol                  = "tcp"

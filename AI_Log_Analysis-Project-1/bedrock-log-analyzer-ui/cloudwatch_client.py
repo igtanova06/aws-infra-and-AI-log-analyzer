@@ -12,19 +12,24 @@ logger = logging.getLogger(__name__)
 class CloudWatchClient:
     """Client to interact with AWS CloudWatch Logs"""
     
-    def __init__(self, region: str = "us-east-1", profile: str = "default"):
+    def __init__(self, region: str = "us-east-1", profile: str = None):
         """
         Initialize CloudWatch client
         
         Args:
             region: AWS region
-            profile: AWS profile name
+            profile: AWS profile name (optional)
         """
         self.region = region
         self.profile = profile
         
         try:
-            session = boto3.Session(profile_name=profile, region_name=region)
+            # Nếu profile là 'default' hoặc None, hãy thử dùng default session (quan trọng khi chạy trên EC2)
+            if profile and profile != "default":
+                session = boto3.Session(profile_name=profile, region_name=region)
+            else:
+                session = boto3.Session(region_name=region)
+                
             self.client = session.client('logs')
             logger.info(f"CloudWatch client initialized for region {region}")
         except Exception as e:
@@ -59,45 +64,66 @@ class CloudWatchClient:
             start_ms = int(start_time.timestamp() * 1000)
             end_ms = int(end_time.timestamp() * 1000)
             
-            # Get log streams
-            streams_response = self.client.describe_log_streams(
+            # Get log streams (paginated to avoid missing streams)
+            all_streams = []
+            paginator = self.client.get_paginator('describe_log_streams')
+            for page in paginator.paginate(
                 logGroupName=log_group,
                 orderBy='LastEventTime',
                 descending=True
-            )
+            ):
+                all_streams.extend(page.get('logStreams', []))
             
-            if not streams_response.get('logStreams'):
+            if not all_streams:
                 logger.warning(f"No log streams found in {log_group}")
                 return []
             
-            # Get logs from each stream
-            for stream in streams_response['logStreams']:
+            # Get logs from each stream (with pagination per stream)
+            for stream in all_streams:
                 if len(logs) >= max_matches:
                     break
                 
                 stream_name = stream['logStreamName']
                 
                 try:
-                    events_response = self.client.get_log_events(
-                        logGroupName=log_group,
-                        logStreamName=stream_name,
-                        startTime=start_ms,
-                        endTime=end_ms,
-                        startFromHead=False
-                    )
-                    
-                    for event in events_response.get('events', []):
-                        if len(logs) >= max_matches:
+                    # Paginate get_log_events using nextForwardToken
+                    next_token = None
+                    while len(logs) < max_matches:
+                        kwargs = {
+                            'logGroupName': log_group,
+                            'logStreamName': stream_name,
+                            'startTime': start_ms,
+                            'endTime': end_ms,
+                            'startFromHead': True
+                        }
+                        if next_token:
+                            kwargs['nextToken'] = next_token
+                        
+                        events_response = self.client.get_log_events(**kwargs)
+                        events = events_response.get('events', [])
+                        
+                        # No events in this page → done with this stream
+                        if not events:
                             break
                         
-                        message = event.get('message', '')
-                        
-                        # Filter by search term if provided
-                        if search_term:
-                            if search_term.lower() in message.lower():
+                        for event in events:
+                            if len(logs) >= max_matches:
+                                break
+                            
+                            message = event.get('message', '')
+                            
+                            # Filter by search term if provided
+                            if search_term:
+                                if search_term.lower() in message.lower():
+                                    logs.append(message)
+                            else:
                                 logs.append(message)
-                        else:
-                            logs.append(message)
+                        
+                        # Check if there are more pages
+                        new_token = events_response.get('nextForwardToken')
+                        if new_token == next_token:
+                            break  # No more pages
+                        next_token = new_token
                 
                 except Exception as e:
                     logger.warning(f"Error reading stream {stream_name}: {e}")

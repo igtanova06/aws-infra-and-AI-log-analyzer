@@ -1,0 +1,49 @@
+---
+- name: Install Docker
+  hosts: aws_ec2
+  become: yes
+  tasks:
+    - name: Install required system packages
+      yum:
+        name:
+          - docker
+          - git
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Check internet connectivity
+      command: ping -c 3 google.com
+      register: ping_test
+      ignore_errors: yes
+
+    - name: Fail if no internet access
+      fail:
+        msg: "Máy chủ không thể kết nối Internet (Kiểm tra NAT Gateway!)."
+      when: ping_test.rc != 0
+
+    - name: Install Python Docker SDK and compatible libraries
+      pip:
+        name:
+          - docker
+          - docker-compose
+          - requests
+          - "urllib3<2.0.0"
+        executable: pip3
+      register: pip_result
+
+    - name: Debug pip result
+      debug:
+        var: pip_result

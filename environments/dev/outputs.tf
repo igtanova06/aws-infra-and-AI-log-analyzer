@@ -15,10 +15,10 @@ output "private_subnet_ids" {
 }
 
 # ── Load Balancer ─────────────────────────────────────────────────────
-# output "alb_dns_name" {
-#   description = "DNS của ALB — paste vào browser để test app sau khi deploy"
-#   value       = aws_lb.alb.dns_name
-# }
+output "alb_dns_name" {
+  description = "DNS của ALB — paste vào browser để test app sau khi deploy"
+  value       = aws_lb.alb.dns_name
+}
 
 # output "alb_arn" {
 #   description = "ARN của ALB — cần nếu sau này gắn thêm WAF hoặc listener"

@@ -31,23 +31,62 @@ resource "aws_vpc_security_group_egress_rule" "alb_egress" {
   ip_protocol       = "-1"
 }
 
-# ── App SG — chỉ nhận từ ALB SG ─────────────────────────────────────
-resource "aws_security_group" "app" {
-  name        = "${local.name_prefix}-sg-app"
-  description = "Allow inbound from ALB SG only"
+# ── LAYER 1: WEB APP SG (Nhận từ ALB) ───────────────────────────────────
+resource "aws_security_group" "web" {
+  name        = "${local.name_prefix}-sg-web"
+  description = "Layer 1: External Facing Web App"
   vpc_id      = aws_vpc.main.id
 
-  tags = {
-    Name = "${local.name_prefix}-sg-app"
-  }
+  tags = { Name = "${local.name_prefix}-sg-layer-1" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
+  security_group_id            = aws_security_group.web.id
+  referenced_security_group_id = aws_security_group.alb.id
+  from_port                    = 8080
+  to_port                      = 8080
+  ip_protocol                  = "tcp"
+}
+
+# ── LAYER 2: LOG ANALYSIS SG (CHỈ nhận từ LAYER 1) ──────────────────────
+resource "aws_security_group" "app" {
+  name        = "${local.name_prefix}-sg-app"
+  description = "Layer 2: Internal Log Analysis Logic"
+  vpc_id      = aws_vpc.main.id
+
+  tags = { Name = "${local.name_prefix}-sg-layer-2" }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
   security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.alb.id
-  from_port                    = local.ports.app
-  to_port                      = local.ports.app
+  referenced_security_group_id = aws_security_group.alb.id # Cho phép ALB gọi vào trực tiếp
+  from_port                    = 80
+  to_port                      = 80
   ip_protocol                  = "tcp"
+}
+
+# ── SSM ENDPOINTS SG (Cổng dùng chung cho tất cả các máy kết nối SSM) ──
+resource "aws_security_group" "ssm_endpoints" {
+  name        = "${local.name_prefix}-sg-ssm-endpoints"
+  description = "Access to SSM Endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  tags = { Name = "${local.name_prefix}-sg-ssm-endpoints" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ssm_endpoints_https" {
+  security_group_id = aws_security_group.ssm_endpoints.id
+  cidr_ipv4         = var.vpc_cidr
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
+# ── EGRESS RULES (Cho phép máy chủ đi ra ngoài) ─────────────────────────
+resource "aws_vpc_security_group_egress_rule" "web_egress" {
+  security_group_id = aws_security_group.web.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
 }
 
 resource "aws_vpc_security_group_egress_rule" "app_egress" {

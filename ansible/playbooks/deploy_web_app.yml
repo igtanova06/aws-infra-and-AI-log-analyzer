@@ -1,0 +1,44 @@
+---
+- name: Deploy Student Management Web App
+  hosts: role_web
+  become: yes
+  vars:
+    app_name: student-management-app
+    host_port: 8080
+    container_port: 80
+
+  tasks:
+    - name: Ensure destination directory exists
+      file:
+        path: "/home/ec2-user/{{ app_name }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    - name: Copy PHP source code to remote host
+      copy:
+        src: "../../Web-Project-1/"
+        dest: "/home/ec2-user/{{ app_name }}/"
+        owner: ec2-user
+        group: ec2-user
+
+    - name: Build PHP Docker image
+      community.docker.docker_image:
+        name: "{{ app_name }}"
+        build:
+          path: "/home/ec2-user/{{ app_name }}"
+        source: build
+        state: present
+      async: 900
+      poll: 10
+
+    - name: Run PHP Web App container
+      community.docker.docker_container:
+        name: "{{ app_name }}"
+        image: "{{ app_name }}:latest"
+        state: started
+        restart_policy: unless-stopped
+        recreate: yes
+        ports:
+          - "{{ host_port }}:{{ container_port }}"

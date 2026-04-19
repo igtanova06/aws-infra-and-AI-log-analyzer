@@ -1,0 +1,21 @@
+---
+- name: Update yum cache
+  yum:
+    update_cache: yes
+
+- name: Install essential base packages
+  yum:
+    name:
+      - curl
+      - wget
+      - unzip
+      - jq
+      - awscli
+    state: present
+
+- name: Apply security patches only
+  yum:
+    security: yes
+    state: latest
+  notify: Restart Server
+  when: apply_security_patches | default(false) | bool

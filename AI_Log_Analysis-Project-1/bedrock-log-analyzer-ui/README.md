@@ -11,8 +11,8 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 - **Multi-Source Log Ingestion** — Concurrently pull logs from multiple CloudWatch Log Groups (VPC Flow Logs, CloudTrail, Application Logs) to prevent throttling
 - **Multi-Format Log Parsing** — Automatically detect and parse VPC Flow Logs, CloudTrail JSON events, and classic application logs
 - **Rule-Based Issue Detection** — Detect connection, permission, resource, database, and security issues using keyword-based rules
-- **AI-Enhanced Solutions** — Leverage AWS Bedrock (Claude 3) for root cause analysis, step-by-step troubleshooting, and prevention strategies
-- **Interactive Dashboard** — 3-tab UI with Summary, Analysis, and Solutions views
+- **AI-Enhanced Solutions (Structured JSON)** — Leverage AWS Bedrock (Claude 3.5) with advanced context building to strictly separate Evidence vs Inference, and provide highly specific, data-driven remediation commands
+- **Interactive Dashboard** — Powerful multi-tier UI rendering Summary (Severity/Impact), Investigation Details (Evidence trace), and Full Action Plans with one-click exporting
 - **Severity & Component Charts** — Visualize error distribution across severity levels and components
 - **Export Results** — Download analysis results as JSON or CSV
 - **Docker Support** — Containerized deployment with health checks
@@ -31,14 +31,23 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 │  • App Logs  │     └──────────────────┘     └────────┬─────────┘
 └──────────────┘                                       │
                                                        ▼
+                                              ┌──────────────────┐
+                                              │ Rule Detector &  │
+                                              │ Log Preprocessor │
+                                              │  • Relevancy     │
+                                              │  • Context       │
+                                              └────────┬─────────┘
+                                                       │
+                                                       ▼
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Streamlit   │◀────│ Bedrock Enhancer │◀────│  Rule Detector   │
-│  Dashboard   │     │  (Claude 3)      │     │                  │
-│              │     │                  │     │  • Connection    │
-│  • Summary   │     │  Root cause      │     │  • Permission    │
-│  • Analysis  │     │  Troubleshooting │     │  • Resource      │
-│  • Solutions │     │  Prevention      │     │  • Security      │
-└──────────────┘     └──────────────────┘     └──────────────────┘
+│  Streamlit   │◀────│ Bedrock Enhancer │◀────│  AI Context      │
+│  Dashboard   │     │  (Claude 3.5)    │     │  (Top samples,   │
+│              │     │                  │     │   Suspicious IPs,│
+│  • Summary   │     │  Strict JSON:    │     │   Actors, APIs)  │
+│  • Analysis  │     │  • Summary       │     └──────────────────┘
+│  • Solutions │     │  • Investigation │
+└──────────────┘     │  • Action Plan   │
+                     └──────────────────┘
 ```
 
 ---
@@ -100,12 +109,11 @@ Open **http://localhost:8501** in your browser.
 |---------|-------------|---------|
 | **AWS Region** | AWS region for CloudWatch & Bedrock | `ap-southeast-1` |
 | **AWS Profile** | AWS CLI profile name | `default` |
-| **Log Groups** | CloudWatch Log Groups (one per line or comma-separated) | VPC, CloudTrail, App Logs |
-| **Hours Back** | Time range to query (1–168 hours) | `1` |
-| **Search Term** | Keyword filter for log messages | `error` |
-| **Max Matches** | Maximum log entries to pull (10–1000) | `500` |
+| **Log Source** | CloudWatch Log Group to focus analysis on (One per run) | `/aws/vpc/flowlogs` |
+| **Search Term** | Keyword filter for log messages (Required) | `error` |
+| **Time Range** | Specific Start Date/Time and End Date/Time | `Last 1 Hour` |
 | **Enable AI** | Toggle Bedrock AI enhancement | `true` |
-| **Bedrock Model** | AI model selection | Claude 3 Haiku |
+| **Bedrock Model** | AI model selection (Cross-Region supported) | Claude 3 Haiku |
 
 ### Default Log Groups
 
@@ -147,12 +155,15 @@ Open **http://localhost:8501** in your browser.
 
 ## 🤖 Supported AI Models
 
-| Model | Speed | Intelligence | Cost per Analysis |
-|-------|-------|-------------|-------------------|
-| **Claude 3 Haiku** | ⚡ Ultra-fast | Good | ~$0.005 |
-| **Claude 3 Sonnet** | 🐢 Slower | Excellent | ~$0.025 |
+Inference routes include **Cross-Region Inference Profiles (`apac.` and `us.`)** to prevent On-Demand capacity limits.
 
-> **Recommendation:** Use **Claude 3 Haiku** for daily operations (fast & cheap). Switch to **Claude 3 Sonnet** for deep investigation of complex incidents.
+| Model ID | Speed | Intelligence | Notes |
+|-------|-------|-------------|-------------------|
+| `anthropic.claude-3-haiku...` | ⚡ Ultra-fast | Good | Standard on-demand limit |
+| `apac.anthropic.claude-3-5-sonnet...` | 🐢 Slower | Excellent | Uses APAC Cross-Region routing |
+| `us.anthropic.claude-3-5-sonnet...` | 🐢 Slower | Excellent | Uses US Cross-Region routing |
+
+> **Recommendation:** Use **Claude 3 Haiku** for daily quick checks. Switch to **APAC Claude 3.5 Sonnet** (`apac.*`) for highly complex investigations to avoid AWS throughput errors.
 
 ---
 
@@ -268,7 +279,8 @@ bedrock-log-analyzer-ui/
 │   ├── log_parser.py          # Multi-format log parser (VPC/CT/App)
 │   ├── pattern_analyzer.py    # Pattern extraction & statistics
 │   ├── rule_detector.py       # Rule-based issue detection
-│   └── bedrock_enhancer.py    # AWS Bedrock AI enhancement
+│   ├── log_preprocessor.py    # Data scoring & contextual sampling
+│   └── bedrock_enhancer.py    # AWS Bedrock AI enhancement (Strict JSON)
 ├── requirements.txt           # Python dependencies
 ├── .env.example               # Environment variable template
 ├── setup.sh                   # Automated setup script

@@ -15,6 +15,7 @@ from .log_parser import LogParser
 from .pattern_analyzer import PatternAnalyzer
 from .rule_detector import RuleBasedDetector
 from .bedrock_enhancer import BedrockEnhancer
+from .log_preprocessor import LogPreprocessor, AIContext
 
 __all__ = [
     'LogEntry',
@@ -28,5 +29,7 @@ __all__ = [
     'LogParser',
     'PatternAnalyzer',
     'RuleBasedDetector',
-    'BedrockEnhancer'
+    'BedrockEnhancer',
+    'LogPreprocessor',
+    'AIContext'
 ]

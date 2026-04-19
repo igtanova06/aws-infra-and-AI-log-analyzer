@@ -1,0 +1,71 @@
+---
+- name: Install and Configure CloudWatch Agent
+  hosts: all
+  become: yes
+  vars:
+    cloudwatch_agent_version: "latest"
+    
+  tasks:
+    - name: Download CloudWatch Agent
+      get_url:
+        url: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+        dest: /tmp/amazon-cloudwatch-agent.rpm
+        mode: '0644'
+
+    - name: Install CloudWatch Agent
+      yum:
+        name: /tmp/amazon-cloudwatch-agent.rpm
+        state: present
+        disable_gpg_check: yes
+
+    - name: Create CloudWatch Agent config directory
+      file:
+        path: /opt/aws/amazon-cloudwatch-agent/etc
+        state: directory
+        mode: '0755'
+
+    - name: Create application logs directory (for app tier)
+      file:
+        path: /home/ec2-user/bedrock-log-analyzer-ui/logs
+        state: directory
+        mode: '0755'
+        owner: ec2-user
+        group: ec2-user
+      when: "'app' in group_names"
+
+    - name: Deploy CloudWatch Agent configuration for App tier
+      template:
+        src: "{{ playbook_dir }}/../templates/cloudwatch_agent_config.json.j2"
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+        mode: '0644'
+      when: "'app' in group_names"
+      notify: Restart CloudWatch Agent
+
+    - name: Deploy CloudWatch Agent configuration for Web tier
+      template:
+        src: "{{ playbook_dir }}/../templates/cloudwatch_agent_config_web.json.j2"
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+        mode: '0644'
+      when: "'web' in group_names"
+      notify: Restart CloudWatch Agent
+
+    - name: Start and enable CloudWatch Agent
+      systemd:
+        name: amazon-cloudwatch-agent
+        state: started
+        enabled: yes
+
+    - name: Configure CloudWatch Agent with config file
+      command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl 
+        -a fetch-config 
+        -m ec2 
+        -s 
+        -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+      changed_when: true
+
+  handlers:
+    - name: Restart CloudWatch Agent
+      systemd:
+        name: amazon-cloudwatch-agent
+        state: restarted

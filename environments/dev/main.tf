@@ -1,6 +1,9 @@
-resource "aws_vpc" "main" {
-  cidr_block = var.vpc_cidr
+data "aws_region" "current" {}
 
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
   tags = {
     Name = "${local.name_prefix}-vpc"
   }
@@ -120,4 +123,48 @@ resource "aws_route_table_association" "db" {
   count          = length(var.db_subnet_cidrs)
   subnet_id      = aws_subnet.db[count.index].id
   route_table_id = aws_route_table.db[count.index].id
+}
+
+
+
+# 1. Endpoint cho dịch vụ SSM (Điều khiển)
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ssm"
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoints.id] # Sửa thành SG SSM Endpoints
+  subnet_ids          = aws_subnet.private[*].id
+  private_dns_enabled = true
+}
+
+# 2. Endpoint cho SSM Messages (Để truyền dữ liệu shell)
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoints.id] # Sửa thành SG SSM Endpoints
+  subnet_ids          = aws_subnet.private[*].id
+  private_dns_enabled = true
+}
+
+# 3. Endpoint cho EC2 Messages (Để Agent báo cáo trạng thái)
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoints.id]
+  subnet_ids          = aws_subnet.private[*].id
+  private_dns_enabled = true
+}
+
+
+# S3 Gateway Endpoint - Cho phép máy EC2 truy cập S3 nội bộ (MIỄN PHÍ)
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = aws_vpc.main.id
+  service_name = "com.amazonaws.${data.aws_region.current.name}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids = concat(
+    [aws_route_table.second_rt.id], # Route table public
+    aws_route_table.private[*].id    # Tất cả route table private
+  )
 }

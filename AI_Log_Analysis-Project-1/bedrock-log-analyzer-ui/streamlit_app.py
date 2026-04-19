@@ -1,11 +1,31 @@
 """
 Streamlit UI for Bedrock Log Analyzer
-Pull logs from CloudWatch and analyze with AI enhancement
+Pull logs from CloudWatch and analyze with AI enhancement.
+
+Single-group mode: analyze one log group per run for cleaner AI results.
 """
 import streamlit as st
+import logging
+import os
+from datetime import datetime
+
+# Setup logging
+log_dir = "/home/ec2-user/bedrock-log-analyzer-ui/logs"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"app_{datetime.now().strftime('%Y%m%d')}.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 import json
 
 # Add src to path
@@ -16,6 +36,7 @@ from log_parser import LogParser
 from pattern_analyzer import PatternAnalyzer
 from rule_detector import RuleBasedDetector
 from bedrock_enhancer import BedrockEnhancer
+from log_preprocessor import LogPreprocessor
 from models import Metadata, AIInfo, AnalysisResult
 
 # Page config
@@ -59,188 +80,242 @@ if 'analysis_result' not in st.session_state:
 if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
 
-# Sidebar
+# ============================================================
+# SIDEBAR — Configuration
+# ============================================================
 st.sidebar.title("⚙️ Configuration")
 
-# AWS Configuration
+# --- AWS Settings ---
 st.sidebar.subheader("AWS Settings")
 aws_region = st.sidebar.text_input("AWS Region", value="ap-southeast-1")
-aws_profile = st.sidebar.text_input("AWS Profile", value="default")
+aws_profile = st.sidebar.text_input("AWS Profile", value="")
 
-# CloudWatch Configuration
-st.sidebar.subheader("CloudWatch Settings")
-log_groups_str = st.sidebar.text_area(
-    "Log Groups (1 group/dòng hoặc cách nhau bằng dấu phẩy)",
-    value="/aws/vpc/flowlogs\n/aws/cloudtrail/logs\n/aws/ec2/applogs",
-    help="Đa luồng chống nghẽn nghẽn. Ví dụ: /aws/vpc/flowlogs, /aws/ec2/applogs"
+# --- Log Group Selection (single group) ---
+st.sidebar.subheader("Log Source")
+
+LOG_GROUP_OPTIONS = [
+    "/aws/vpc/flowlogs",
+    "/aws/cloudtrail/logs",
+    "/aws/ec2/applogs",
+]
+
+selected_log_group = st.sidebar.selectbox(
+    "Log Group (chọn 1 nguồn mỗi lần phân tích)",
+    options=LOG_GROUP_OPTIONS,
+    help="Chọn đúng 1 log group để AI phân tích tập trung."
 )
 
-# Time range
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    hours_back = st.number_input("Hours back", min_value=1, max_value=168, value=1)
-with col2:
-    st.write("")  # Spacer
+# Source-specific search term hints
+_SEARCH_HINTS = {
+    "/aws/vpc/flowlogs": "Ví dụ: REJECT, 22, 3389, ACCEPT",
+    "/aws/cloudtrail/logs": "Ví dụ: AccessDenied, DeleteVpc, errorCode, root",
+    "/aws/ec2/applogs": "Ví dụ: ERROR, timeout, failed, brute, JWT",
+}
+search_hint = _SEARCH_HINTS.get(selected_log_group, "Nhập từ khóa tìm kiếm")
 
-# Search configuration
+# --- Search Term (required) ---
 st.sidebar.subheader("Search Settings")
 search_term = st.sidebar.text_input(
-    "Search Term",
-    value="error",
-    help="Search for specific keywords in logs"
+    "Search Term (bắt buộc)",
+    value="",
+    help=search_hint,
+    placeholder=search_hint
 )
 
-max_matches = st.sidebar.slider(
-    "Max Matches",
-    min_value=10,
-    max_value=1000,
-    value=500,
-    step=50
-)
+# Internal limit for retrieval
+max_matches = 10000
 
-# AI Configuration
+# --- Time Range (replaces "hours back") ---
+st.sidebar.subheader("⏰ Time Range")
+
+# Default: last 1 hour
+default_end = datetime.now()
+default_start = default_end - timedelta(hours=1)
+
+col_date1, col_date2 = st.sidebar.columns(2)
+with col_date1:
+    start_date = st.date_input("Start Date", value=default_start.date())
+with col_date2:
+    start_time_input = st.time_input("Start Time", value=default_start.time().replace(second=0, microsecond=0))
+
+col_date3, col_date4 = st.sidebar.columns(2)
+with col_date3:
+    end_date = st.date_input("End Date", value=default_end.date())
+with col_date4:
+    end_time_input = st.time_input("End Time", value=default_end.time().replace(second=0, microsecond=0))
+
+# Combine date + time into datetime
+start_dt = datetime.combine(start_date, start_time_input)
+end_dt = datetime.combine(end_date, end_time_input)
+
+# --- AI Configuration ---
 st.sidebar.subheader("AI Enhancement")
 enable_ai = st.sidebar.checkbox("Enable AI Enhancement", value=True)
 bedrock_model = st.sidebar.selectbox(
     "Bedrock Model",
     [
         "anthropic.claude-3-haiku-20240307-v1:0", 
-        "anthropic.claude-3-sonnet-20240229-v1:0"
+        "apac.anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "apac.anthropic.claude-3-sonnet-20240229-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
     ],
-    help="Claude 3 Haiku (Siêu tốc độ, Khuyên dùng) và Claude 3 Sonnet (Cực kỳ thông minh nhưng tốn phí cao hơn)."
+    help="Dùng 'apac.' cho khu vực Singapore (ap-southeast-1) hoặc 'anthropic.claude-3-haiku' bản gốc. Haiku thường luôn chạy ổn trên on-demand."
 )
 
-# Main content
+# ============================================================
+# MAIN CONTENT
+# ============================================================
 st.title("📊 Log Analysis System")
-st.markdown("A simple but powerful tool for analyzing log files")
+st.markdown("Single-source AI analysis — one log group per run for focused, reliable results.")
 
-# Analyze button in sidebar
+# ============================================================
+# VALIDATION + ANALYZE
+# ============================================================
 if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primary"):
-    st.session_state.is_analyzing = True
-    
-    with st.spinner("Analyzing logs..."):
-        try:
-            # Step 1: Pull logs from CloudWatch
-            st.info("📥 Pulling logs from CloudWatch...")
-            cw_client = CloudWatchClient(region=aws_region, profile=aws_profile)
-            
-            start_time = datetime.now() - timedelta(hours=hours_back)
-            end_time = datetime.now()
-            
-            # Tách mảng Log Groups từ giao diện 
-            log_groups = [g.strip() for g in log_groups_str.replace('\n', ',').split(',')] if log_groups_str else []
-            raw_logs = []
-            
-            progress_text = "Đang hút Log từ Mây về..."
-            my_bar = st.progress(0, text=progress_text)
-            
-            for index, group in enumerate(log_groups):
-                if not group: continue
-                # Update progress bar
-                my_bar.progress((index + 1) / len(log_groups), text=f"Đang phân tích kho: {group}")
-                
-                try:
-                    group_logs = cw_client.get_logs(
-                        log_group=group,
-                        start_time=start_time,
-                        end_time=end_time,
-                        search_term=search_term if search_term else None,
-                        max_matches=max_matches // len(log_groups) if len(log_groups) > 0 else max_matches
-                    )
-                    raw_logs.extend(group_logs)
-                except Exception as e:
-                    st.warning(f"⚠️ Could not pull logs from {group}: {e}")
-                    
-            my_bar.empty()
-            
-            if not raw_logs:
-                st.warning("⚠️ No logs found matching your criteria across all groups")
-                st.session_state.is_analyzing = False
-            else:
-                st.success(f"✅ Found {len(raw_logs)} matching logs across {len(log_groups)} kho dữ liệu")
-                
-                # Step 2: Parse logs
-                st.info("🔍 Parsing logs...")
-                parser = LogParser()
-                matches = [parser.parse_log_entry(log) for log in raw_logs]
-                matches = [m for m in matches if m]  # Filter None values
-                st.success(f"✅ Parsed {len(matches)} log entries")
-                
-                # Step 3: Analyze patterns
-                st.info("📊 Analyzing patterns...")
-                analyzer = PatternAnalyzer()
-                analysis = analyzer.analyze_log_entries(matches)
-                st.success(f"✅ Found {len(analysis.error_patterns)} error patterns")
-                
-                # Step 4: Detect issues
-                st.info("🎯 Detecting issues...")
-                detector = RuleBasedDetector()
-                issues = detector.detect_issues(analysis)
-                solutions = detector.generate_basic_solutions(issues)
-                st.success(f"✅ Detected {len(issues)} issues")
-                
-                # Step 5: AI Enhancement
-                enhanced_solutions = solutions
-                ai_info = None
-                
-                if enable_ai:
-                    st.info("🤖 Enhancing with AI...")
-                    enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
-                    
-                    if enhancer.is_available():
-                        log_examples = [p.pattern for p in analysis.error_patterns[:3]]
-                        enhanced_solutions, usage_stats = enhancer.enhance_solutions(
-                            solutions,
-                            log_examples
-                        )
-                        
-                        if "error" in usage_stats:
-                            st.error(f"❌ {usage_stats['error']}")
-                            st.warning("⚠️ Đã chuyển về chế độ hiển thị Basic Solutions do lỗi Bedrock.")
-                            ai_info = AIInfo(ai_enhancement_used=False)
-                        else:
-                            ai_info = AIInfo(
-                                ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
-                                bedrock_model_used=usage_stats.get("bedrock_model_used"),
-                                total_tokens_used=usage_stats.get("total_tokens_used"),
-                                estimated_total_cost=usage_stats.get("estimated_total_cost"),
-                                api_calls_made=usage_stats.get("api_calls_made")
-                            )
-                            st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
-                    else:
-                        st.warning("⚠️ AWS Bedrock not available, using basic solutions")
-                        ai_info = AIInfo(ai_enhancement_used=False)
-                else:
-                    ai_info = AIInfo(ai_enhancement_used=False)
-                
-                # Step 6: Create results
-                metadata = Metadata(
-                    timestamp=datetime.now().isoformat(),
-                    search_term=search_term,
-                    log_directory=log_groups_str.replace('\n', ', '),
-                    total_files_searched=len(log_groups),
-                    total_matches=len(matches)
-                )
-                
-                results = AnalysisResult(
-                    metadata=metadata,
-                    matches=matches,
-                    analysis=analysis,
-                    solutions=enhanced_solutions,
-                    ai_info=ai_info
-                )
-                
-                st.session_state.analysis_result = results
-                st.success("✅ Analysis complete!")
-                
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-            import traceback
-            st.error(traceback.format_exc())
-        finally:
-            st.session_state.is_analyzing = False
+    logger.info(f"Analysis started - Log Group: {selected_log_group}, Search: {search_term}, Time: {start_dt} to {end_dt}")
 
-# Create tabs
+    # --- Input validation ---
+    validation_errors = []
+
+    if not selected_log_group:
+        validation_errors.append("⚠️ Vui lòng chọn một Log Group.")
+
+    if not search_term or not search_term.strip():
+        validation_errors.append("⚠️ Search Term là bắt buộc. Vui lòng nhập từ khóa tìm kiếm.")
+
+    if start_dt >= end_dt:
+        validation_errors.append("⚠️ Start Time phải trước End Time. Kiểm tra lại khoảng thời gian.")
+
+    if validation_errors:
+        for err in validation_errors:
+            st.error(err)
+            logger.warning(f"Validation error: {err}")
+    else:
+        # --- All inputs valid → run analysis ---
+        st.session_state.is_analyzing = True
+
+        with st.spinner("Analyzing logs..."):
+            try:
+                # Step 1: Pull logs from CloudWatch (single group)
+                st.info(f"📥 Pulling logs from **{selected_log_group}**...")
+                cw_client = CloudWatchClient(region=aws_region, profile=aws_profile)
+
+                raw_logs = cw_client.get_logs(
+                    log_group=selected_log_group,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                    search_term=search_term.strip(),
+                    max_matches=max_matches
+                )
+
+                if not raw_logs:
+                    st.warning(f"⚠️ No logs found in {selected_log_group} matching '{search_term}' in the selected time range.")
+                    logger.warning(f"No logs found - Group: {selected_log_group}, Search: {search_term}")
+                    st.session_state.is_analyzing = False
+                else:
+                    st.success(f"✅ Found {len(raw_logs)} matching logs from {selected_log_group}")
+                    logger.info(f"Retrieved {len(raw_logs)} logs from {selected_log_group}")
+
+                    # Step 2: Parse logs
+                    st.info("🔍 Parsing logs...")
+                    parser = LogParser()
+                    matches = [parser.parse_log_entry(log) for log in raw_logs]
+                    matches = [m for m in matches if m]  # Filter None values
+                    st.success(f"✅ Parsed {len(matches)} log entries")
+
+                    # Step 3: Analyze patterns
+                    st.info("📊 Analyzing patterns...")
+                    analyzer = PatternAnalyzer()
+                    analysis = analyzer.analyze_log_entries(matches)
+                    st.success(f"✅ Found {len(analysis.error_patterns)} error patterns")
+
+                    # Step 4: Detect issues (rule-based)
+                    st.info("🎯 Detecting issues...")
+                    detector = RuleBasedDetector()
+                    issues = detector.detect_issues(analysis)
+                    solutions = detector.generate_basic_solutions(issues)
+                    st.success(f"✅ Detected {len(issues)} issues")
+
+                    # Step 4.5: Build AI context (NEW — preprocessing)
+                    st.info("🧠 Building AI context...")
+                    preprocessor = LogPreprocessor()
+                    ai_context = preprocessor.prepare_ai_context(
+                        entries=matches,
+                        analysis=analysis,
+                        log_group_name=selected_log_group,
+                        search_term=search_term.strip(),
+                        time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}"
+                    )
+                    st.success(
+                        f"✅ AI context ready — source: {ai_context.source_type}, "
+                        f"high-relevance logs: {ai_context.total_logs_after_scoring}, "
+                        f"suspicious IPs: {len(ai_context.suspicious_ips)}"
+                    )
+
+                    # Step 5: AI Enhancement
+                    enhanced_solutions = solutions
+                    ai_info = None
+
+                    if enable_ai:
+                        st.info("🤖 Enhancing with AI...")
+                        enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
+
+                        if enhancer.is_available():
+                            enhanced_solutions, usage_stats = enhancer.enhance_solutions(
+                                solutions,
+                                ai_context=ai_context
+                            )
+
+                            if "error" in usage_stats:
+                                st.error(f"❌ {usage_stats['error']}")
+                                st.warning("⚠️ Đã chuyển về chế độ hiển thị Basic Solutions do lỗi Bedrock.")
+                                ai_info = AIInfo(ai_enhancement_used=False)
+                            else:
+                                ai_info = AIInfo(
+                                    ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
+                                    bedrock_model_used=usage_stats.get("bedrock_model_used"),
+                                    total_tokens_used=usage_stats.get("total_tokens_used"),
+                                    estimated_total_cost=usage_stats.get("estimated_total_cost"),
+                                    api_calls_made=usage_stats.get("api_calls_made")
+                                )
+                                st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
+                        else:
+                            st.warning("⚠️ AWS Bedrock not available, using basic solutions")
+                            ai_info = AIInfo(ai_enhancement_used=False)
+                    else:
+                        ai_info = AIInfo(ai_enhancement_used=False)
+
+                    # Step 6: Create results
+                    metadata = Metadata(
+                        timestamp=datetime.now().isoformat(),
+                        search_term=search_term.strip(),
+                        log_directory=selected_log_group,
+                        total_files_searched=1,
+                        total_matches=len(matches)
+                    )
+
+                    results = AnalysisResult(
+                        metadata=metadata,
+                        matches=matches,
+                        analysis=analysis,
+                        solutions=enhanced_solutions,
+                        ai_info=ai_info
+                    )
+
+                    st.session_state.analysis_result = results
+                    st.success("✅ Analysis complete!")
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                logger.error(f"Analysis failed: {str(e)}", exc_info=True)
+                import traceback
+                st.error(traceback.format_exc())
+            finally:
+                st.session_state.is_analyzing = False
+
+# ============================================================
+# RESULTS TABS (unchanged structure)
+# ============================================================
 tab1, tab2, tab3 = st.tabs(["📋 Summary", "📊 Analysis", "🔧 Solutions"])
 
 if st.session_state.analysis_result is None:
@@ -353,15 +428,75 @@ else:
         st.subheader("Suggested Solutions")
         if result.solutions:
             for i, solution in enumerate(result.solutions, 1):
-                with st.expander(f"{solution.problem}"):
-                    if solution.ai_enhanced:
-                        st.markdown('<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                # If we have structural JSON from the new Bedrock prompt, render it layered
+                if solution.structured_solution:
+                    s_data = solution.structured_solution
+                    summary = s_data.get("summary", {})
+                    investigation = s_data.get("investigation", {})
+                    action_plan = s_data.get("action_plan", {})
                     
-                    st.write(f"**Components:** {', '.join(solution.affected_components)}")
-                    st.write(f"**Issue Type:** {solution.issue_type.value}")
-                    st.write(f"\n{solution.solution}")
-                    
-                    if hasattr(solution, 'tokens_used') and solution.tokens_used:
-                        st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
+                    with st.expander(f"🚨 {solution.problem}", expanded=True):
+                        st.markdown(f'<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
+                        
+                        # Tier 1: Summary Box
+                        severity = summary.get("severity", "Unknown")
+                        impact = summary.get("impact", "Unknown")
+                        st.error(f"**Severity:** {severity} | **Business Impact:** {impact}")
+                        
+                        if action_plan.get("immediate_containment"):
+                            st.warning(f"🔥 **Immediate Containment:** {action_plan.get('immediate_containment')}")
+                        if action_plan.get("next_best_command"):
+                            st.info(f"⚡ **Next Best Command to Verify:**\n```bash\n{action_plan.get('next_best_command')}\n```")
+                            
+                        # Tier 2: Investigation (Evidence & Inference)
+                        st.markdown("### 🔍 Investigation Details")
+                        inv_col1, inv_col2 = st.columns(2)
+                        with inv_col1:
+                            st.markdown("**Evidence From Logs**")
+                            for ev in investigation.get("evidence_from_logs", []):
+                                st.markdown(f"- {ev}")
+                        with inv_col2:
+                            st.markdown("**AI Inference**")
+                            for inf in investigation.get("inference", []):
+                                st.markdown(f"- {inf}")
+                                
+                        if investigation.get("why_not_other_causes"):
+                            st.markdown(f"**Alternative Causes Ruled Out:** {investigation.get('why_not_other_causes')}")
+                        if investigation.get("confidence"):
+                            st.caption(f"**Confidence:** {investigation.get('confidence')}")
+                            
+                        # Tier 3: Full Remediation
+                        st.markdown("### 🔧 Full Action Plan")
+                        verification = action_plan.get("verification_commands", [])
+                        if verification:
+                            st.markdown("**All Verification Steps:**")
+                            for cmd in verification:
+                                st.markdown(f"- `{cmd}`")
+                                
+                        fixes = action_plan.get("fix_steps", [])
+                        if fixes:
+                            st.markdown("**Fix Steps:**")
+                            for fx in fixes:
+                                st.markdown(f"- {fx}")
+                                
+                        if action_plan.get("prevention"):
+                            st.markdown(f"**Prevention Guidance:** {action_plan.get('prevention')}")
+                        
+                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
+                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
+                            
+                else:    
+                    # Legacy flat string rendering for fallback basic solutions
+                    with st.expander(f"{solution.problem}"):
+                        if solution.ai_enhanced:
+                            st.markdown('<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                        
+                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
+                        st.write(f"**Issue Type:** {solution.issue_type.value}")
+                        st.write(f"\n{solution.solution}")
+                        
+                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
+                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
         else:
             st.info("No solutions found")

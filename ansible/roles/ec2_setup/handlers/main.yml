@@ -1,0 +1,4 @@
+---
+- name: Restart Server
+  reboot:
+    msg: "Rebooting to apply system updates"

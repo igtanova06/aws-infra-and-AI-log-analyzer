@@ -57,6 +57,7 @@ class Solution:
     ai_enhanced: bool = False
     tokens_used: Optional[int] = None
     estimated_cost: Optional[float] = None
+    structured_solution: Optional[dict] = field(default=None)
 
 
 @dataclass
@@ -108,7 +109,8 @@ class AnalysisResult:
                     'affected_components': s.affected_components,
                     'ai_enhanced': s.ai_enhanced,
                     'tokens_used': s.tokens_used,
-                    'estimated_cost': s.estimated_cost
+                    'estimated_cost': s.estimated_cost,
+                    'structured_solution': s.structured_solution
                 }
                 for s in self.solutions
             ],

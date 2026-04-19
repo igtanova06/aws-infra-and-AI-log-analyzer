@@ -1,0 +1,14 @@
+# --- AWS Configuration ---
+aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
+
+# --- Bedrock Configuration ---
+bedrock_model: "us.amazon.nova-micro-v1:0"
+max_tokens: 2000
+temperature: 0.3
+
+# --- Application Configuration ---
+app_port: 8501
+
+# --- Patch Management ---
+# Chỉ set true nếu bạn chủ động muốn apply security patches
+apply_security_patches: false

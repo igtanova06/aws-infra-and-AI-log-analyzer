@@ -5,6 +5,24 @@ Pull logs from CloudWatch and analyze with AI enhancement.
 Single-group mode: analyze one log group per run for cleaner AI results.
 """
 import streamlit as st
+import logging
+import os
+from datetime import datetime
+
+# Setup logging
+log_dir = "/home/ec2-user/bedrock-log-analyzer-ui/logs"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"app_{datetime.now().strftime('%Y%m%d')}.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 import sys
 import os
 from datetime import datetime, timedelta, date, time
@@ -154,6 +172,7 @@ st.markdown("Single-source AI analysis — one log group per run for focused, re
 # VALIDATION + ANALYZE
 # ============================================================
 if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primary"):
+    logger.info(f"Analysis started - Log Group: {selected_log_group}, Search: {search_term}, Time: {start_dt} to {end_dt}")
 
     # --- Input validation ---
     validation_errors = []
@@ -170,6 +189,7 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
     if validation_errors:
         for err in validation_errors:
             st.error(err)
+            logger.warning(f"Validation error: {err}")
     else:
         # --- All inputs valid → run analysis ---
         st.session_state.is_analyzing = True
@@ -190,9 +210,11 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
 
                 if not raw_logs:
                     st.warning(f"⚠️ No logs found in {selected_log_group} matching '{search_term}' in the selected time range.")
+                    logger.warning(f"No logs found - Group: {selected_log_group}, Search: {search_term}")
                     st.session_state.is_analyzing = False
                 else:
                     st.success(f"✅ Found {len(raw_logs)} matching logs from {selected_log_group}")
+                    logger.info(f"Retrieved {len(raw_logs)} logs from {selected_log_group}")
 
                     # Step 2: Parse logs
                     st.info("🔍 Parsing logs...")
@@ -285,6 +307,7 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
 
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
+                logger.error(f"Analysis failed: {str(e)}", exc_info=True)
                 import traceback
                 st.error(traceback.format_exc())
             finally:

@@ -29,3 +29,4 @@ keyed_groups:
 
 groups:
   app: tags.Role == 'app'
+  web: tags.Role == 'web'

@@ -88,3 +88,44 @@ resource "aws_iam_role_policy_attachment" "ansible_s3_attachment" {
   policy_arn = aws_iam_policy.ansible_s3_policy.arn
 }
 
+# ── CLOUDWATCH AGENT PERMISSIONS ────────────────────────────
+
+# Policy cho CloudWatch Agent để ghi logs và metrics
+resource "aws_iam_policy" "cloudwatch_agent_policy" {
+  name        = "${local.name_prefix}-cloudwatch-agent-policy"
+  description = "Policy for CloudWatch Agent to write logs and metrics"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeTags",
+          "logs:PutLogEvents",
+          "logs:CreateLogStream",
+          "logs:CreateLogGroup",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:PutParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_attachment" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = aws_iam_policy.cloudwatch_agent_policy.arn
+}
+

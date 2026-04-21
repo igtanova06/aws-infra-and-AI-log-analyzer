@@ -28,6 +28,23 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [aws_security_group.db.id]
   skip_final_snapshot   = true
   multi_az             = false
+  
+  # Enable CloudWatch Logs export
+  enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
+  
+  # Enable Performance Insights (optional but recommended)
+  performance_insights_enabled = true
+  performance_insights_retention_period = 7
+  
+  # Backup configuration
+  backup_retention_period = 7
+  backup_window          = "03:00-04:00"
+  maintenance_window     = "mon:04:00-mon:05:00"
+  
+  tags = {
+    Name        = "${local.name_prefix}-db"
+    Environment = var.env
+  }
 }
 
 output "db_endpoint" {

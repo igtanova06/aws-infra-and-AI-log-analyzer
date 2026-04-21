@@ -78,7 +78,13 @@ st.sidebar.subheader("Log Source")
 LOG_GROUP_OPTIONS = [
     "/aws/vpc/flowlogs",
     "/aws/cloudtrail/logs",
-    "/aws/ec2/applogs",
+    "/aws/ec2/web-tier/system",
+    "/aws/ec2/web-tier/httpd",
+    "/aws/ec2/web-tier/application",
+    "/aws/ec2/app-tier/system",
+    "/aws/ec2/app-tier/streamlit",
+    "/aws/rds/mysql/error",
+    "/aws/rds/mysql/slowquery",
 ]
 
 selected_log_group = st.sidebar.selectbox(
@@ -91,7 +97,13 @@ selected_log_group = st.sidebar.selectbox(
 _SEARCH_HINTS = {
     "/aws/vpc/flowlogs": "Ví dụ: REJECT, 22, 3389, ACCEPT",
     "/aws/cloudtrail/logs": "Ví dụ: AccessDenied, DeleteVpc, errorCode, root",
-    "/aws/ec2/applogs": "Ví dụ: ERROR, timeout, failed, brute, JWT",
+    "/aws/ec2/web-tier/system": "Ví dụ: Failed password, kernel, error",
+    "/aws/ec2/web-tier/httpd": "Ví dụ: 404, 500, POST, GET",
+    "/aws/ec2/web-tier/application": "Ví dụ: ERROR, SQL Injection, timeout, failed",
+    "/aws/ec2/app-tier/system": "Ví dụ: Failed password, kernel, error",
+    "/aws/ec2/app-tier/streamlit": "Ví dụ: ERROR, exception, streamlit",
+    "/aws/rds/mysql/error": "Ví dụ: Access denied, connection, error",
+    "/aws/rds/mysql/slowquery": "Ví dụ: Query_time, Lock_time, SELECT",
 }
 search_hint = _SEARCH_HINTS.get(selected_log_group, "Nhập từ khóa tìm kiếm")
 
@@ -408,6 +420,7 @@ else:
                 # If we have structural JSON from the new Bedrock prompt, render it layered
                 if solution.structured_solution:
                     s_data = solution.structured_solution
+                    attack_class = s_data.get("attack_classification", {})
                     summary = s_data.get("summary", {})
                     investigation = s_data.get("investigation", {})
                     action_plan = s_data.get("action_plan", {})
@@ -416,18 +429,70 @@ else:
                         st.markdown(f'<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
                         st.write(f"**Components:** {', '.join(solution.affected_components)}")
                         
+                        # NEW: Attack Classification
+                        if attack_class:
+                            st.markdown("### 🎯 Attack Classification")
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("MITRE Technique", attack_class.get("mitre_technique", "N/A"))
+                            with col2:
+                                st.metric("Threat Actor", attack_class.get("threat_actor_profile", "N/A"))
+                            with col3:
+                                st.metric("Attack Stage", attack_class.get("attack_stage", "N/A"))
+                            st.divider()
+                        
                         # Tier 1: Summary Box
                         severity = summary.get("severity", "Unknown")
                         impact = summary.get("impact", "Unknown")
-                        st.error(f"**Severity:** {severity} | **Business Impact:** {impact}")
+                        confidence = summary.get("confidence", "Unknown")
+                        
+                        # Color-code severity
+                        severity_color = {
+                            "Critical": "🔴",
+                            "High": "🟠",
+                            "Medium": "🟡",
+                            "Low": "🟢"
+                        }.get(severity, "⚪")
+                        
+                        st.error(f"{severity_color} **Severity:** {severity} | **Confidence:** {confidence}")
+                        st.info(f"**Business Impact:** {impact}")
                         
                         if action_plan.get("immediate_containment"):
                             st.warning(f"🔥 **Immediate Containment:** {action_plan.get('immediate_containment')}")
                         if action_plan.get("next_best_command"):
-                            st.info(f"⚡ **Next Best Command to Verify:**\n```bash\n{action_plan.get('next_best_command')}\n```")
+                            st.code(action_plan.get('next_best_command'), language='bash')
                             
                         # Tier 2: Investigation (Evidence & Inference)
                         st.markdown("### 🔍 Investigation Details")
+                        
+                        # Attack Timeline (NEW)
+                        timeline = investigation.get("attack_timeline", {})
+                        if timeline:
+                            st.markdown("**Attack Timeline:**")
+                            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+                            with tcol1:
+                                st.metric("First Seen", timeline.get("first_seen", "N/A"))
+                            with tcol2:
+                                st.metric("Peak Activity", timeline.get("peak_activity", "N/A"))
+                            with tcol3:
+                                st.metric("Last Seen", timeline.get("last_seen", "N/A"))
+                            with tcol4:
+                                st.metric("Duration", timeline.get("total_duration", "N/A"))
+                        
+                        # Attack Metrics (NEW)
+                        metrics = investigation.get("attack_metrics", {})
+                        if metrics:
+                            st.markdown("**Attack Metrics:**")
+                            mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+                            with mcol1:
+                                st.metric("Total Attempts", metrics.get("total_attempts", "N/A"))
+                            with mcol2:
+                                st.metric("Attempts/Min", metrics.get("attempts_per_minute", "N/A"))
+                            with mcol3:
+                                st.metric("Success Rate", metrics.get("success_rate", "N/A"))
+                            with mcol4:
+                                st.metric("Unique Targets", metrics.get("unique_targets", "N/A"))
+                        
                         inv_col1, inv_col2 = st.columns(2)
                         with inv_col1:
                             st.markdown("**Evidence From Logs**")
@@ -440,25 +505,40 @@ else:
                                 
                         if investigation.get("why_not_other_causes"):
                             st.markdown(f"**Alternative Causes Ruled Out:** {investigation.get('why_not_other_causes')}")
-                        if investigation.get("confidence"):
-                            st.caption(f"**Confidence:** {investigation.get('confidence')}")
                             
                         # Tier 3: Full Remediation
                         st.markdown("### 🔧 Full Action Plan")
                         verification = action_plan.get("verification_commands", [])
                         if verification:
-                            st.markdown("**All Verification Steps:**")
+                            st.markdown("**Verification Commands:**")
                             for cmd in verification:
-                                st.markdown(f"- `{cmd}`")
+                                st.code(cmd, language='bash')
                                 
                         fixes = action_plan.get("fix_steps", [])
                         if fixes:
                             st.markdown("**Fix Steps:**")
                             for fx in fixes:
-                                st.markdown(f"- {fx}")
+                                st.markdown(f"{fx}")
                                 
-                        if action_plan.get("prevention"):
-                            st.markdown(f"**Prevention Guidance:** {action_plan.get('prevention')}")
+                        # Prevention Strategy (NEW - structured)
+                        prevention = action_plan.get("prevention", {})
+                        if prevention:
+                            st.markdown("**Prevention Strategy:**")
+                            if isinstance(prevention, dict):
+                                if prevention.get("aws_services"):
+                                    st.markdown("*AWS Services:*")
+                                    for svc in prevention.get("aws_services", []):
+                                        st.markdown(f"  - {svc}")
+                                if prevention.get("configuration"):
+                                    st.markdown("*Configuration Changes:*")
+                                    for cfg in prevention.get("configuration", []):
+                                        st.markdown(f"  - {cfg}")
+                                if prevention.get("monitoring"):
+                                    st.markdown("*Monitoring Improvements:*")
+                                    for mon in prevention.get("monitoring", []):
+                                        st.markdown(f"  - {mon}")
+                            else:
+                                st.markdown(f"{prevention}")
                         
                         if hasattr(solution, 'tokens_used') and solution.tokens_used:
                             st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")

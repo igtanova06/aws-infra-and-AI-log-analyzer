@@ -47,13 +47,37 @@ class AIContext:
 def detect_source_type(log_group_name: str) -> str:
     """
     Infer log source type from the CloudWatch log group name.
-    Returns 'vpc_flow', 'cloudtrail', or 'app'.
+    Returns specific source type for better AI context.
     """
     name_lower = log_group_name.lower()
+    
+    # VPC Flow Logs
     if 'vpc' in name_lower or 'flowlog' in name_lower:
         return 'vpc_flow'
+    
+    # CloudTrail
     if 'cloudtrail' in name_lower or 'trail' in name_lower:
         return 'cloudtrail'
+    
+    # Apache/HTTP logs
+    if 'httpd' in name_lower or 'apache' in name_lower:
+        return 'apache'
+    
+    # System logs (syslog)
+    if 'system' in name_lower or 'syslog' in name_lower:
+        return 'syslog'
+    
+    # RDS/MySQL logs
+    if 'rds' in name_lower or 'mysql' in name_lower:
+        if 'slowquery' in name_lower or 'slow' in name_lower:
+            return 'mysql_slow'
+        return 'mysql_error'
+    
+    # Streamlit/App tier
+    if 'streamlit' in name_lower:
+        return 'streamlit'
+    
+    # Default: application logs
     return 'app'
 
 
@@ -93,11 +117,32 @@ _SENSITIVE_APIS = [
     'deletetrail', 'stoplogging',
 ]
 
+# Apache attack patterns
+_APACHE_ATTACK_PATTERNS = [
+    'sql_injection', 'path_traversal', 'xss',
+    'union', 'select', 'drop', '../', '/etc/',
+]
+
+# Syslog security keywords
+_SYSLOG_SECURITY_KEYWORDS = [
+    'failed password', 'authentication failure', 'invalid user',
+    'ufw block', 'connection refused', 'access denied',
+]
+
+# MySQL error codes (high severity)
+_MYSQL_CRITICAL_ERRORS = [
+    'MY-010334',  # Access denied
+    'MY-013360',  # Plugin authentication failed
+    'MY-010069',  # Too many connections
+    'MY-012574',  # InnoDB error
+]
+
 
 def score_entry(entry: LogEntry, source_type: str) -> int:
     """
     Score a single parsed LogEntry by relevance to AI analysis.
     Higher score = more important for the AI to see.
+    Enhanced to support all log group types.
     """
     score = 0
 
@@ -138,12 +183,54 @@ def score_entry(entry: LogEntry, source_type: str) -> int:
         if '"root"' in (entry.content or '') or ':root' in (entry.content or ''):
             score += 3
 
-    elif source_type == 'app':
+    elif source_type == 'apache':
+        # HTTP status codes
+        if '500' in text or '503' in text or '502' in text:
+            score += 3
+        if '404' in text or '403' in text or '401' in text:
+            score += 1
+        # Attack patterns
+        for pattern in _APACHE_ATTACK_PATTERNS:
+            if pattern in text:
+                score += 4
+                break
+
+    elif source_type == 'syslog':
+        # SSH brute force
+        for kw in _SYSLOG_SECURITY_KEYWORDS:
+            if kw in text:
+                score += 4
+                break
+        # Firewall blocks
+        if 'ufw block' in text or 'denied' in text:
+            score += 3
+
+    elif source_type in ['mysql_error', 'mysql_slow']:
+        # Critical MySQL errors
+        for err_code in _MYSQL_CRITICAL_ERRORS:
+            if err_code in text:
+                score += 4
+                break
+        # Slow queries
+        if source_type == 'mysql_slow':
+            # Extract query time if available
+            import re
+            time_match = re.search(r'(\d+\.?\d*)s', text)
+            if time_match:
+                query_time = float(time_match.group(1))
+                if query_time >= 10:
+                    score += 4
+                elif query_time >= 5:
+                    score += 2
+
+    elif source_type in ['app', 'streamlit']:
         msg_lower = text
         if 'timeout' in msg_lower or 'exception' in msg_lower:
             score += 2
         if 'brute' in msg_lower or 'failed password' in msg_lower:
             score += 3
+        if 'sql injection' in msg_lower:
+            score += 4
 
     return score
 
@@ -161,10 +248,16 @@ def _extract_ips(entries: List[LogEntry]) -> Counter:
     for entry in entries:
         raw = (entry.content or '') + ' ' + (entry.message or '')
         for ip in _IP_PATTERN.findall(raw):
-            # Skip common private/loopback
-            if ip.startswith('127.') or ip == '0.0.0.0':
+            # Skip common private/loopback/AWS metadata
+            if ip.startswith('127.') or ip == '0.0.0.0' or ip.startswith('169.254.'):
                 continue
-            ip_counter[ip] += 1
+            # Skip private IPs unless they appear frequently (internal scanning)
+            if ip.startswith('10.') or ip.startswith('192.168.') or ip.startswith('172.'):
+                # Only count if appears multiple times (potential internal threat)
+                ip_counter[ip] += 1
+            else:
+                # Public IPs are always interesting
+                ip_counter[ip] += 1
     return ip_counter
 
 
@@ -366,16 +459,20 @@ class LogPreprocessor:
     ) -> List[str]:
         """
         Build within-source correlation hints.
-        These are presented as hints, not conclusions.
+        Enhanced to support all log group types.
         """
         hints = []
 
         # Hint: repeated IPs with high counts
         for ip, count in ip_counts.most_common(3):
             if count >= 5:
+                context = "connection attempts" if source_type == 'vpc_flow' else "requests"
+                if source_type == 'apache':
+                    context = "HTTP requests"
+                elif source_type == 'syslog':
+                    context = "SSH attempts"
                 hints.append(
-                    f"IP {ip} appears {count} times — may indicate repeated "
-                    f"{'connection attempts' if source_type == 'vpc_flow' else 'activity'}"
+                    f"IP {ip} appears {count} times — may indicate repeated {context}"
                 )
 
         # Hint: same user triggering multiple error types (CloudTrail)
@@ -387,7 +484,7 @@ class LogPreprocessor:
             )
 
         # Hint: high error concentration in one component (App)
-        if source_type == 'app' and analysis.components:
+        if source_type in ['app', 'streamlit'] and analysis.components:
             total = sum(analysis.components.values())
             for comp, count in analysis.components.items():
                 ratio = count / total if total > 0 else 0
@@ -396,5 +493,51 @@ class LogPreprocessor:
                         f"Component '{comp}' accounts for {ratio:.0%} of all log entries — "
                         "may be the primary failure point"
                     )
+
+        # Hint: Apache attack patterns
+        if source_type == 'apache':
+            attack_count = sum(1 for p in analysis.error_patterns if any(
+                x in p.pattern.lower() for x in ['attack', 'injection', 'traversal', 'xss']
+            ))
+            if attack_count >= 2:
+                hints.append(
+                    f"Detected {attack_count} different attack patterns in HTTP logs — "
+                    "possible coordinated attack or vulnerability scanning"
+                )
+
+        # Hint: SSH brute force patterns
+        if source_type == 'syslog':
+            failed_auth_count = sum(1 for p in analysis.error_patterns if 
+                'failed password' in p.pattern.lower() or 'authentication failure' in p.pattern.lower()
+            )
+            if failed_auth_count >= 1:
+                total_attempts = sum(p.count for p in analysis.error_patterns if 
+                    'failed password' in p.pattern.lower()
+                )
+                if total_attempts >= 10:
+                    hints.append(
+                        f"Detected {total_attempts} failed authentication attempts — "
+                        "likely SSH brute force attack"
+                    )
+
+        # Hint: MySQL slow queries
+        if source_type == 'mysql_slow':
+            slow_count = len(analysis.error_patterns)
+            if slow_count >= 3:
+                hints.append(
+                    f"Found {slow_count} different slow query patterns — "
+                    "may indicate missing indexes or inefficient queries"
+                )
+
+        # Hint: MySQL connection issues
+        if source_type == 'mysql_error':
+            conn_errors = sum(1 for p in analysis.error_patterns if 
+                'access denied' in p.pattern.lower() or 'connection' in p.pattern.lower()
+            )
+            if conn_errors >= 1:
+                hints.append(
+                    "Database connection/authentication errors detected — "
+                    "check credentials and connection pool settings"
+                )
 
         return hints

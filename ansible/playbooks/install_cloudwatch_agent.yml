@@ -1,0 +1,121 @@
+---
+# ============================================================
+# Install and Configure CloudWatch Agent
+# ============================================================
+- name: Install CloudWatch Agent on EC2 Instances
+  hosts: all
+  become: yes
+  vars:
+    cloudwatch_agent_version: "latest"
+    cloudwatch_config_path: "/opt/aws/amazon-cloudwatch-agent/etc/config.json"
+    
+  tasks:
+    # ── Step 1: Download CloudWatch Agent ─────────────────
+    - name: Download CloudWatch Agent RPM
+      get_url:
+        url: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/{{ cloudwatch_agent_version }}/amazon-cloudwatch-agent.rpm"
+        dest: /tmp/amazon-cloudwatch-agent.rpm
+        mode: '0644'
+      register: download_result
+      retries: 3
+      delay: 5
+      until: download_result is succeeded
+
+    # ── Step 2: Install CloudWatch Agent ──────────────────
+    - name: Install CloudWatch Agent
+      yum:
+        name: /tmp/amazon-cloudwatch-agent.rpm
+        state: present
+        disable_gpg_check: yes
+
+    # ── Step 3: Create config directory ───────────────────
+    - name: Ensure CloudWatch Agent config directory exists
+      file:
+        path: /opt/aws/amazon-cloudwatch-agent/etc
+        state: directory
+        mode: '0755'
+
+    # ── Step 4: Deploy configuration based on role ────────
+    - name: Deploy CloudWatch Agent config for Web tier
+      template:
+        src: ../templates/cloudwatch_agent_config_web.json.j2
+        dest: "{{ cloudwatch_config_path }}"
+        mode: '0644'
+      when: "'web' in group_names or 'web' in ansible_hostname"
+      notify: Restart CloudWatch Agent
+
+    - name: Deploy CloudWatch Agent config for App tier
+      template:
+        src: ../templates/cloudwatch_agent_config_app.json.j2
+        dest: "{{ cloudwatch_config_path }}"
+        mode: '0644'
+      when: "'app' in group_names or 'l2' in ansible_hostname"
+      notify: Restart CloudWatch Agent
+
+    # ── Step 5: Start CloudWatch Agent ────────────────────
+    - name: Start CloudWatch Agent with config
+      command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a fetch-config
+        -m ec2
+        -s
+        -c file:{{ cloudwatch_config_path }}
+      register: agent_start
+      changed_when: "'Configuration validation' in agent_start.stdout"
+
+    # ── Step 6: Verify agent is running ───────────────────
+    - name: Check CloudWatch Agent status
+      command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a query
+        -m ec2
+        -c default
+      register: agent_status
+      changed_when: false
+
+    - name: Display CloudWatch Agent status
+      debug:
+        msg: "{{ agent_status.stdout }}"
+
+    # ── Step 7: Create log directories ────────────────────
+    - name: Create application log directory
+      file:
+        path: /var/log/app
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    # ── Step 8: Setup log rotation ────────────────────────
+    - name: Configure logrotate for application logs
+      copy:
+        dest: /etc/logrotate.d/app-logs
+        content: |
+          /var/log/app/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0644 root root
+          }
+        mode: '0644'
+
+  handlers:
+    - name: Restart CloudWatch Agent
+      command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a stop
+        -m ec2
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Start CloudWatch Agent after restart
+      command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a fetch-config
+        -m ec2
+        -s
+        -c file:{{ cloudwatch_config_path }}
+      changed_when: false

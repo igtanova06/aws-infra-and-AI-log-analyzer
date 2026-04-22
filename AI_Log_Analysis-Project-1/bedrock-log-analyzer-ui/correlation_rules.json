@@ -1,0 +1,143 @@
+{
+  "version": "1.0",
+  "description": "Correlation rules for multi-source log analysis",
+  "rules": [
+    {
+      "rule_id": "R001",
+      "name": "Reconnaissance to Exploit",
+      "description": "Network scanning followed by application attack within 5 minutes",
+      "required_sources": ["vpc_flow", "application"],
+      "event_sequence": ["network_reject", "sql_injection"],
+      "max_time_gap_seconds": 300,
+      "event_type": "coordinated_attack",
+      "severity": "CRITICAL",
+      "mitre_tactics": ["TA0001", "TA0002"],
+      "mitre_techniques": ["T1190", "T1059"],
+      "base_confidence": 70.0,
+      "confidence_modifiers": {
+        "has_trace_id": 20.0,
+        "automated": 10.0,
+        "multiple_targets": 15.0
+      }
+    },
+    {
+      "rule_id": "R002",
+      "name": "Privilege Escalation Attempt",
+      "description": "API access denied followed by repeated unauthorized access attempts",
+      "required_sources": ["cloudtrail", "application"],
+      "event_sequence": ["api_deny", "unauthorized_access"],
+      "max_time_gap_seconds": 600,
+      "event_type": "privilege_escalation",
+      "severity": "HIGH",
+      "mitre_tactics": ["TA0004"],
+      "mitre_techniques": ["T1078"],
+      "base_confidence": 65.0,
+      "confidence_modifiers": {
+        "has_user_arn": 25.0,
+        "repeated_attempts": 15.0
+      }
+    },
+    {
+      "rule_id": "R003",
+      "name": "Data Exfiltration Pattern",
+      "description": "Database query spike followed by high network traffic",
+      "required_sources": ["database", "vpc_flow"],
+      "event_sequence": ["slow_query", "high_traffic"],
+      "max_time_gap_seconds": 120,
+      "event_type": "data_exfiltration",
+      "severity": "CRITICAL",
+      "mitre_tactics": ["TA0010"],
+      "mitre_techniques": ["T1041"],
+      "base_confidence": 75.0,
+      "confidence_modifiers": {
+        "large_data_volume": 20.0,
+        "external_ip": 15.0
+      }
+    },
+    {
+      "rule_id": "R004",
+      "name": "Application-Database Connection Issue",
+      "description": "Application connection timeouts correlate with database connection errors",
+      "required_sources": ["application", "database"],
+      "event_sequence": ["connection_timeout", "too_many_connections"],
+      "max_time_gap_seconds": 60,
+      "event_type": "performance_issue",
+      "severity": "HIGH",
+      "mitre_tactics": [],
+      "mitre_techniques": [],
+      "base_confidence": 80.0,
+      "confidence_modifiers": {
+        "has_instance_id": 15.0,
+        "high_frequency": 10.0
+      }
+    },
+    {
+      "rule_id": "R005",
+      "name": "Brute Force Attack",
+      "description": "Multiple failed authentication attempts from same source",
+      "required_sources": ["application"],
+      "event_sequence": ["unauthorized_access", "unauthorized_access", "unauthorized_access"],
+      "max_time_gap_seconds": 180,
+      "event_type": "brute_force",
+      "severity": "HIGH",
+      "mitre_tactics": ["TA0006"],
+      "mitre_techniques": ["T1110"],
+      "base_confidence": 85.0,
+      "confidence_modifiers": {
+        "automated": 15.0,
+        "high_frequency": 10.0
+      }
+    },
+    {
+      "rule_id": "R006",
+      "name": "Lateral Movement",
+      "description": "Successful access followed by access to multiple resources",
+      "required_sources": ["cloudtrail", "vpc_flow"],
+      "event_sequence": ["api_call", "network_accept"],
+      "max_time_gap_seconds": 300,
+      "event_type": "lateral_movement",
+      "severity": "HIGH",
+      "mitre_tactics": ["TA0008"],
+      "mitre_techniques": ["T1021"],
+      "base_confidence": 60.0,
+      "confidence_modifiers": {
+        "multiple_targets": 20.0,
+        "has_trace_id": 15.0
+      }
+    },
+    {
+      "rule_id": "R007",
+      "name": "Denial of Service",
+      "description": "High volume of network rejects in short time",
+      "required_sources": ["vpc_flow"],
+      "event_sequence": ["network_reject"],
+      "max_time_gap_seconds": 60,
+      "event_type": "denial_of_service",
+      "severity": "CRITICAL",
+      "mitre_tactics": ["TA0040"],
+      "mitre_techniques": ["T1498"],
+      "base_confidence": 70.0,
+      "confidence_modifiers": {
+        "high_frequency": 20.0,
+        "automated": 15.0
+      }
+    },
+    {
+      "rule_id": "R008",
+      "name": "Credential Stuffing",
+      "description": "Multiple login attempts with different credentials from same source",
+      "required_sources": ["application", "vpc_flow"],
+      "event_sequence": ["unauthorized_access", "network_reject"],
+      "max_time_gap_seconds": 120,
+      "event_type": "credential_stuffing",
+      "severity": "HIGH",
+      "mitre_tactics": ["TA0006"],
+      "mitre_techniques": ["T1110.004"],
+      "base_confidence": 75.0,
+      "confidence_modifiers": {
+        "automated": 20.0,
+        "multiple_targets": 10.0
+      }
+    }
+  ]
+}

@@ -30,15 +30,14 @@ resource "aws_db_instance" "main" {
   multi_az             = false
   
   # Enable CloudWatch Logs export
-  enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
+  enabled_cloudwatch_logs_exports = ["error", "slowquery"]
   
-  # Enable Performance Insights (optional but recommended)
-  performance_insights_enabled = true
-  performance_insights_retention_period = 7
+  # Performance Insights - Disabled for Free Tier
+  performance_insights_enabled = false
   
-  # Backup configuration
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
+  # Backup configuration - Free Tier limits
+  backup_retention_period = 0  # Free Tier doesn't support automated backups
+  # backup_window          = "03:00-04:00"  # Not needed when retention = 0
   maintenance_window     = "mon:04:00-mon:05:00"
   
   tags = {

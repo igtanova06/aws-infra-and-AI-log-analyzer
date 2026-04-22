@@ -195,8 +195,21 @@ resource "aws_iam_policy" "cloudwatch_agent_policy" {
           "logs:DescribeLogStreams"
         ]
         Resource = [
-          aws_cloudwatch_log_group.app_logs.arn,
-          "${aws_cloudwatch_log_group.app_logs.arn}:*"
+          # Web tier log groups
+          aws_cloudwatch_log_group.web_system.arn,
+          "${aws_cloudwatch_log_group.web_system.arn}:*",
+          aws_cloudwatch_log_group.web_httpd.arn,
+          "${aws_cloudwatch_log_group.web_httpd.arn}:*",
+          aws_cloudwatch_log_group.web_application.arn,
+          "${aws_cloudwatch_log_group.web_application.arn}:*",
+          # App tier log groups
+          aws_cloudwatch_log_group.app_system.arn,
+          "${aws_cloudwatch_log_group.app_system.arn}:*",
+          aws_cloudwatch_log_group.app_streamlit.arn,
+          "${aws_cloudwatch_log_group.app_streamlit.arn}:*",
+          # Infrastructure log groups
+          aws_cloudwatch_log_group.vpc_flow_logs.arn,
+          "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
         ]
       },
       {

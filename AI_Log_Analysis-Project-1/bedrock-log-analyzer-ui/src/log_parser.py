@@ -78,7 +78,40 @@ class LogParser:
             content=line
         )
         
-        # 1. CloudTrail JSON format
+        # 1. Modern JSON Application Logs (Streamlit, Node.js, etc.)
+        try:
+            json_data = json.loads(line)
+            # Check for common JSON log fields (not CloudTrail)
+            if 'level' in json_data and 'message' in json_data and 'eventVersion' not in json_data:
+                entry.component = json_data.get('component', json_data.get('logger', 'App'))
+                entry.timestamp = json_data.get('timestamp', json_data.get('time', ''))
+                
+                # Map log levels to severity
+                level = json_data.get('level', 'INFO').upper()
+                severity_map = {
+                    'FATAL': 'CRITICAL',
+                    'ERROR': 'ERROR',
+                    'WARN': 'WARNING',
+                    'WARNING': 'WARNING',
+                    'INFO': 'INFO',
+                    'DEBUG': 'DEBUG',
+                    'TRACE': 'DEBUG'
+                }
+                entry.severity = severity_map.get(level, level)
+                
+                # Extract message and context
+                message = json_data.get('message', '')
+                error = json_data.get('error', json_data.get('exception', ''))
+                if error:
+                    entry.message = f"{message} | Error: {error}"
+                else:
+                    entry.message = message
+                
+                return entry
+        except Exception:
+            pass
+        
+        # 2. CloudTrail JSON format
         try:
             json_data = json.loads(line)
             if 'eventVersion' in json_data and 'eventName' in json_data:

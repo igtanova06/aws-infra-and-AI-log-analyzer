@@ -9,7 +9,9 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 ## ✨ Features
 
 - **Multi-Source Log Ingestion** — Concurrently pull logs from multiple CloudWatch Log Groups (VPC Flow Logs, CloudTrail, Application Logs) to prevent throttling
-- **Multi-Format Log Parsing** — Automatically detect and parse VPC Flow Logs, CloudTrail JSON events, and classic application logs
+- **Multi-Format Log Parsing** — Automatically detect and parse VPC Flow Logs, CloudTrail JSON events, modern JSON app logs, and classic application logs
+- **Temporal Analysis** ⭐ NEW — Detect burst attacks and time-based patterns (events/minute, peak activity, attack duration)
+- **Context-Aware Rule Detection** ⭐ NEW — Avoid false positives with positive/negative keyword matching and severity scoring (CRITICAL/HIGH/MEDIUM/LOW)
 - **Rule-Based Issue Detection** — Detect connection, permission, resource, database, and security issues using keyword-based rules
 - **AI-Enhanced Solutions (Structured JSON)** — Leverage AWS Bedrock (Claude 3.5) with advanced context building to strictly separate Evidence vs Inference, and provide highly specific, data-driven remediation commands
 - **Interactive Dashboard** — Powerful multi-tier UI rendering Summary (Severity/Impact), Investigation Details (Evidence trace), and Full Action Plans with one-click exporting
@@ -24,18 +26,24 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │  CloudWatch  │────▶│  Log Parser      │────▶│ Pattern Analyzer │
-│  Log Groups  │     │  (3 formats)     │     │                  │
-│              │     │  • VPC Flow      │     │  Severity dist.  │
-│  • VPC Flow  │     │  • CloudTrail    │     │  Component dist. │
-│  • CloudTrail│     │  • App Logs      │     │  Error patterns  │
-│  • App Logs  │     └──────────────────┘     └────────┬─────────┘
-└──────────────┘                                       │
-                                                       ▼
+│  Log Groups  │     │  (4 formats)     │     │  + Temporal      │
+│              │     │  • VPC Flow      │     │                  │
+│  • VPC Flow  │     │  • CloudTrail    │     │  Severity dist.  │
+│  • CloudTrail│     │  • JSON App Logs │     │  Component dist. │
+│  • App Logs  │     │  • Classic Logs  │     │  Error patterns  │
+└──────────────┘     └──────────────────┘     │  ⭐ Attack velocity│
+                                               │  ⭐ Burst detection│
+                                               └────────┬─────────┘
+                                                        │
+                                                        ▼
                                               ┌──────────────────┐
-                                              │ Rule Detector &  │
-                                              │ Log Preprocessor │
+                                              │ Rule Detector    │
+                                              │ (Context-Aware)  │
                                               │  • Relevancy     │
                                               │  • Context       │
+                                              │  ⭐ Severity Score│
+                                              │  ⭐ False Positive│
+                                              │     Filtering    │
                                               └────────┬─────────┘
                                                        │
                                                        ▼
@@ -43,9 +51,9 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 │  Streamlit   │◀────│ Bedrock Enhancer │◀────│  AI Context      │
 │  Dashboard   │     │  (Claude 3.5)    │     │  (Top samples,   │
 │              │     │                  │     │   Suspicious IPs,│
-│  • Summary   │     │  Strict JSON:    │     │   Actors, APIs)  │
-│  • Analysis  │     │  • Summary       │     └──────────────────┘
-│  • Solutions │     │  • Investigation │
+│  • Summary   │     │  Strict JSON:    │     │   Actors, APIs,  │
+│  • Analysis  │     │  • Summary       │     │   ⭐ Temporal)   │
+│  • Solutions │     │  • Investigation │     └──────────────────┘
 └──────────────┘     │  • Action Plan   │
                      └──────────────────┘
 ```

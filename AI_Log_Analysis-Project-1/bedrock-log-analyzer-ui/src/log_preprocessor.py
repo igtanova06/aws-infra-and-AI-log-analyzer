@@ -38,6 +38,9 @@ class AIContext:
     suspicious_apis: List[Dict] = field(default_factory=list)     # [{api, count, context}]
     representative_samples: List[str] = field(default_factory=list)  # curated raw log lines
     within_source_hints: List[str] = field(default_factory=list)  # correlation hints
+    
+    # NEW: Temporal analysis metrics
+    temporal_analysis: Dict = field(default_factory=dict)          # attack velocity, burst detection
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +375,9 @@ class LogPreprocessor:
         # --- Within-source correlation hints ---
         hints = self._build_hints(source_type, ip_counts, suspicious_users, suspicious_apis, analysis)
 
+        # --- Temporal analysis (NEW) ---
+        temporal_analysis = analysis.time_pattern or {}
+
         return AIContext(
             source_type=source_type,
             log_group_name=log_group_name,
@@ -386,6 +392,7 @@ class LogPreprocessor:
             suspicious_apis=suspicious_apis,
             representative_samples=samples,
             within_source_hints=hints,
+            temporal_analysis=temporal_analysis,
         )
 
     # ---- internal helpers ----
@@ -459,7 +466,7 @@ class LogPreprocessor:
     ) -> List[str]:
         """
         Build within-source correlation hints.
-        Enhanced to support all log group types.
+        Enhanced to support all log group types and temporal patterns.
         """
         hints = []
 
@@ -538,6 +545,21 @@ class LogPreprocessor:
                 hints.append(
                     "Database connection/authentication errors detected — "
                     "check credentials and connection pool settings"
+                )
+
+        # NEW: Temporal pattern hints
+        if analysis.time_pattern:
+            tp = analysis.time_pattern
+            if tp.get('is_burst_attack'):
+                hints.append(
+                    f"⚠️ BURST ATTACK DETECTED: {tp.get('events_per_minute', 0):.1f} events/minute "
+                    f"over {tp.get('duration_minutes', 0):.1f} minutes. "
+                    f"Peak activity at {tp.get('peak_activity_time', 'N/A')} with {tp.get('peak_activity_count', 0)} events."
+                )
+            elif tp.get('events_per_minute', 0) > 2:
+                hints.append(
+                    f"Elevated activity: {tp.get('events_per_minute', 0):.1f} events/minute "
+                    f"(duration: {tp.get('duration_minutes', 0):.1f} min)"
                 )
 
         return hints

@@ -116,8 +116,8 @@ search_term = st.sidebar.text_input(
     placeholder=search_hint
 )
 
-# Internal limit for retrieval
-max_matches = 10000
+# Internal limit for retrieval (increased for large-scale analysis)
+max_matches = 100000
 
 # --- Time Range (replaces "hours back") ---
 st.sidebar.subheader("⏰ Time Range")

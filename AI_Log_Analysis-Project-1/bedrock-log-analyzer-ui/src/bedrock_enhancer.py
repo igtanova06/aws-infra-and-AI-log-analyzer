@@ -278,6 +278,20 @@ class BedrockEnhancer:
             prompt += "DO NOT waste effort re-discovering what the correlator already found.\n"
             prompt += "Leverage the correlation context to provide DEEPER insights.\n\n"
         
+        # Temporal analysis (attack velocity, burst detection)
+        if ctx.temporal_analysis:
+            tp = ctx.temporal_analysis
+            prompt += "# TEMPORAL ANALYSIS\n"
+            prompt += f"  • First Occurrence: {tp.get('first_occurrence', 'N/A')}\n"
+            prompt += f"  • Last Occurrence: {tp.get('last_occurrence', 'N/A')}\n"
+            prompt += f"  • Duration: {tp.get('duration_minutes', 0):.1f} minutes\n"
+            prompt += f"  • Total Events: {tp.get('total_occurrences', 0)}\n"
+            prompt += f"  • Event Rate: {tp.get('events_per_minute', 0):.1f} events/minute\n"
+            prompt += f"  • Peak Activity: {tp.get('peak_activity_time', 'N/A')} ({tp.get('peak_activity_count', 0)} events)\n"
+            if tp.get('is_burst_attack'):
+                prompt += "  ⚠️ BURST ATTACK PATTERN DETECTED — High event velocity suggests automated attack\n"
+            prompt += "\n"
+        
         # Representative samples with context
         if ctx.representative_samples:
             prompt += "# REPRESENTATIVE LOG SAMPLES (Highest Relevance)\n"
@@ -318,6 +332,15 @@ class BedrockEnhancer:
                 "• Path Traversal: ../ patterns in file access logs\n"
                 "• Command Injection: Shell metacharacters in input\n"
                 "• Session Hijacking: Token reuse, expired session access\n\n"
+            ),
+            'multi_source': (
+                "# CROSS-SOURCE ATTACK PATTERNS TO DETECT\n"
+                "• Coordinated Attack: Same IP appears in VPC REJECT + Application exploit + CloudTrail API abuse\n"
+                "• Kill Chain Progression: Network reconnaissance → Application exploit → Privilege escalation → Data exfiltration\n"
+                "• Lateral Movement: Internal IPs appearing across VPC flow + Application logs\n"
+                "• Multi-Layer Brute Force: Failed SSH in VPC + Failed auth in App + AccessDenied in CloudTrail\n"
+                "• APT Indicators: Low-and-slow activity across multiple sources over extended time period\n"
+                "• Infrastructure Compromise: Database connection spikes correlated with application attack patterns\n\n"
             )
         }
         prompt += attack_guidance.get(ctx.source_type, "")

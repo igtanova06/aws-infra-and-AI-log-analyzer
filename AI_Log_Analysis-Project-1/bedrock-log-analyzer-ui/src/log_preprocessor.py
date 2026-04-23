@@ -60,6 +60,10 @@ def detect_source_type(log_group_name: str) -> str:
     """
     name_lower = log_group_name.lower()
     
+    # Multi-source analysis (contains multiple log groups)
+    if 'multi-source' in name_lower or 'multi_source' in name_lower:
+        return 'multi_source'
+    
     # VPC Flow Logs
     if 'vpc' in name_lower or 'flowlog' in name_lower:
         return 'vpc_flow'
@@ -241,6 +245,31 @@ def score_entry(entry: LogEntry, source_type: str) -> int:
         if 'sql injection' in msg_lower:
             score += 4
 
+    elif source_type == 'multi_source':
+        # Multi-source: apply scoring from all source types for max coverage
+        # VPC signals
+        if 'REJECT' in (entry.content or ''):
+            score += 3
+        for port in _ATTACK_PORTS:
+            if f' {port} ' in (entry.content or ''):
+                score += 2
+                break
+        # CloudTrail signals
+        content_lower = (entry.content or '').lower()
+        if 'accessdenied' in content_lower or 'unauthorizedoperation' in content_lower:
+            score += 3
+        for api in _SENSITIVE_APIS:
+            if api in content_lower:
+                score += 3
+                break
+        # App signals
+        if 'timeout' in text or 'exception' in text:
+            score += 2
+        if 'brute' in text or 'failed password' in text:
+            score += 3
+        if 'sql injection' in text:
+            score += 4
+
     return score
 
 
@@ -343,7 +372,14 @@ class LogPreprocessor:
         source_type = detect_source_type(log_group_name)
 
         # --- Score every entry ---
-        scored = [(score_entry(e, source_type), e) for e in entries]
+        if source_type == 'multi_source':
+            # Per-entry scoring: each entry scored by its own source type
+            scored = []
+            for e in entries:
+                entry_source = detect_source_type(e.component or '')
+                scored.append((score_entry(e, entry_source), e))
+        else:
+            scored = [(score_entry(e, source_type), e) for e in entries]
         scored.sort(key=lambda x: x[0], reverse=True)
 
         # --- Severity summary (from analysis, already computed) ---
@@ -425,7 +461,9 @@ class LogPreprocessor:
                         f"Events: {len(event.timeline)})"
                     )
                     summary_lines.append(f"   Correlation keys: {', '.join(k for k, v in event.correlation_keys.items() if v)}")
-                    summary_lines.append(f"   Timeline: {event.timeline[0]['timestamp']} → {event.timeline[-1]['timestamp']}")
+                    ts_start = event.timeline[0].timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(event.timeline[0].timestamp, 'strftime') else str(event.timeline[0].timestamp)
+                    ts_end = event.timeline[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(event.timeline[-1].timestamp, 'strftime') else str(event.timeline[-1].timestamp)
+                    summary_lines.append(f"   Timeline: {ts_start} → {ts_end}")
                     if event.matched_rules:
                         summary_lines.append(f"   Matched rules: {', '.join(event.matched_rules[:3])}")
                     summary_lines.append("")

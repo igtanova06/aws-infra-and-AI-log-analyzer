@@ -102,6 +102,58 @@ class AdvancedCorrelatedEvent:
     
     # Evidence
     evidence_by_source: Dict[str, List[Dict]] = field(default_factory=dict)
+    
+    # ---- Convenience properties for UI compatibility ----
+    
+    @property
+    def attack_name(self) -> str:
+        """Human-readable attack name from best matching rule or event type"""
+        if self.attack_sequences:
+            return self.attack_sequences[0].pattern_name
+        # Fallback: make event_type human readable
+        return self.event_type.replace('_', ' ').title()
+    
+    @property
+    def sources(self) -> List[str]:
+        """List of log sources involved in this correlated event"""
+        return self.context.get('sources_involved', list(self.evidence_by_source.keys()))
+    
+    @property
+    def ai_recommendation(self) -> str:
+        """Combined AI recommendation text"""
+        if self.ai_recommendations:
+            return '\n'.join(self.ai_recommendations)
+        return self.ai_summary or "No AI recommendation available yet — run AI enhancement for detailed analysis."
+    
+    @property
+    def evidence(self) -> List[str]:
+        """Flattened evidence list across all sources"""
+        result = []
+        for source, events in self.evidence_by_source.items():
+            for event in events:
+                result.append(f"[{source}] {event.get('timestamp', '')} - {event.get('message', '')}")
+        return result
+    
+    @property
+    def matched_rules(self) -> List[str]:
+        """List of matched detection rule names"""
+        rules = []
+        for seq in self.attack_sequences:
+            rules.append(f"{seq.pattern_name} (Confidence: {seq.confidence:.1f}%)")
+        return rules
+    
+    @property
+    def correlation_keys(self) -> Dict[str, str]:
+        """Correlation keys as a dict for UI rendering"""
+        key_type = 'unknown'
+        key_value = self.primary_correlation_key
+        if ':' in self.primary_correlation_key:
+            key_type, key_value = self.primary_correlation_key.split(':', 1)
+        return {
+            key_type: key_value,
+            'strength': self.correlation_strength,
+            'correlation_id': self.correlation_id
+        }
 
 
 # ============================================================
@@ -382,7 +434,7 @@ class AdvancedCorrelator:
         
         if clustered_patterns:
             # Filter to only include entries matching significant patterns (count >= 5)
-            significant_patterns = [p for p in clustered_patterns if p.count >= 5]
+            significant_patterns = [p for p in clustered_patterns if p.count >= 2]
             
             if significant_patterns:
                 # Create pattern signatures for fast lookup

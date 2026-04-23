@@ -2,7 +2,8 @@
 Streamlit UI for Bedrock Log Analyzer
 Pull logs from CloudWatch and analyze with AI enhancement.
 
-Single-group mode: analyze one log group per run for cleaner AI results.
+Unified pipeline: auto-adapts based on selected log groups.
+All sources selected by default for maximum AI context.
 """
 import streamlit as st
 import sys
@@ -20,7 +21,6 @@ from rule_detector import RuleBasedDetector
 from bedrock_enhancer import BedrockEnhancer
 from log_preprocessor import LogPreprocessor
 from models import Metadata, AIInfo, AnalysisResult
-from multi_log_correlator import MultiLogCorrelator, MultiSourceContext
 from advanced_correlator import AdvancedCorrelator, AdvancedCorrelatedEvent
 
 # Page config
@@ -63,113 +63,50 @@ if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = None
 if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
-if 'multi_source_context' not in st.session_state:
-    st.session_state.multi_source_context = None
-if 'log_sources_cache' not in st.session_state:
-    st.session_state.log_sources_cache = {}
 if 'advanced_correlated_events' not in st.session_state:
     st.session_state.advanced_correlated_events = []
-if 'correlation_mode' not in st.session_state:
-    st.session_state.correlation_mode = 'basic'
 
 # ============================================================
 # SIDEBAR — Configuration
 # ============================================================
 st.sidebar.title("⚙️ Configuration")
 
-# --- Analysis Mode ---
-st.sidebar.subheader("Analysis Mode")
-analysis_mode = st.sidebar.radio(
-    "Select Mode",
-    ["Multi-Source Correlation", "Single Source (Advanced)"],
-    index=0,  # Default to Multi-Source
-    help="Multi-Source: Main analysis engine - correlate across multiple log groups for comprehensive threat detection. Single Source: Advanced drill-down mode for focused analysis of one specific log group."
-)
-
-# --- Correlation Engine (for Multi-Source mode) ---
-if analysis_mode == "Multi-Source Correlation":
-    st.sidebar.subheader("Correlation Engine")
-    correlation_mode = st.sidebar.radio(
-        "Correlation Algorithm",
-        ["Basic (IP-based)", "Advanced (Trace ID + Timeline)"],
-        index=1,  # Default to Advanced
-        help="Basic: Simple IP matching. Advanced: Rich correlation keys (trace_id, request_id, session_id) + sequence detection."
-    )
-    st.session_state.correlation_mode = 'advanced' if 'Advanced' in correlation_mode else 'basic'
-    
-    if st.session_state.correlation_mode == 'advanced':
-        st.sidebar.info("🚀 Using Advanced Correlator:\n- Rich correlation keys\n- Timeline sequence detection\n- Rule engine\n- AI-powered recommendations")
-    else:
-        st.sidebar.warning("⚠️ Using Basic Correlator:\n- IP-based only\n- May have false positives with NAT")
-
 # --- AWS Settings ---
 st.sidebar.subheader("AWS Settings")
 aws_region = st.sidebar.text_input("AWS Region", value="ap-southeast-1")
 aws_profile = st.sidebar.text_input("AWS Profile", value="")
 
-# --- Log Group Selection ---
-st.sidebar.subheader("Log Source")
+# --- Log Source Selection ---
+st.sidebar.subheader("📂 Log Sources")
 
 LOG_GROUP_OPTIONS = [
     "/aws/vpc/flowlogs",
     "/aws/cloudtrail/logs",
-    "/aws/ec2/application",        # Consolidated web + app logs
+    "/aws/ec2/application",
     "/aws/rds/mysql/error",
     "/aws/rds/mysql/slowquery",
 ]
 
-if analysis_mode == "Single Source (Advanced)":
-    # Advanced drill-down mode
-    selected_log_group = st.sidebar.selectbox(
-        "Log Group (Advanced Drill-down)",
-        options=LOG_GROUP_OPTIONS,
-        help="🔬 Advanced mode: Phân tích chi tiết một nguồn log cụ thể. Dùng khi bạn đã biết chính xác nguồn cần điều tra."
-    )
-    selected_log_groups = [selected_log_group]
-    st.sidebar.info("💡 **Tip:** Dùng Multi-Source mode trước để phát hiện attack patterns, sau đó drill-down vào nguồn cụ thể bằng Single Source mode.")
-else:
-    # Multi-source mode (MAIN ENGINE)
-    selected_log_groups = st.sidebar.multiselect(
-        "Log Groups (Main Analysis Engine)",
-        options=LOG_GROUP_OPTIONS,
-        default=["/aws/vpc/flowlogs", "/aws/ec2/application"],
-        help="🎯 Main engine: Phân tích đa nguồn để phát hiện attack patterns phức tạp. Khuyến nghị: 2-3 sources cho kết quả tốt nhất."
-    )
-    
-    if len(selected_log_groups) < 2:
-        st.sidebar.error("⚠️ Cần chọn ít nhất 2 log groups cho Multi-Source Correlation!")
-    elif len(selected_log_groups) > 4:
-        st.sidebar.warning("⚠️ Chọn quá nhiều sources có thể làm chậm phân tích. Khuyến nghị: 2-3 sources.")
+selected_log_groups = st.sidebar.multiselect(
+    "Log Groups",
+    options=LOG_GROUP_OPTIONS,
+    default=LOG_GROUP_OPTIONS,  # ALL selected by default
+    help="Mặc định: tất cả sources để AI có context đầy đủ nhất. Hệ thống tự động correlation khi có 2+ sources."
+)
 
-# Source-specific search term hints
-_SEARCH_HINTS = {
-    "/aws/vpc/flowlogs": "Ví dụ: REJECT, 22, 3389, ACCEPT",
-    "/aws/cloudtrail/logs": "Ví dụ: AccessDenied, DeleteVpc, errorCode, root",
-    "/aws/ec2/application": "Ví dụ: ERROR, Failed password, SQL Injection, 500, timeout, trace_id",
-    "/aws/rds/mysql/error": "Ví dụ: Access denied, connection, error",
-    "/aws/rds/mysql/slowquery": "Ví dụ: Query_time, Lock_time, SELECT",
-}
+if not selected_log_groups:
+    st.sidebar.error("⚠️ Vui lòng chọn ít nhất 1 log group.")
+elif len(selected_log_groups) >= 2:
+    st.sidebar.success(f"✅ {len(selected_log_groups)} sources → Cross-source correlation sẽ tự động chạy")
 
-if analysis_mode == "Single Source":
-    search_hint = _SEARCH_HINTS.get(selected_log_groups[0], "Nhập từ khóa tìm kiếm")
-else:
-    search_hint = "Nhập từ khóa chung (ví dụ: error, REJECT, denied) hoặc trace_id để correlation"
-
-# --- Search Term (optional for multi-source) ---
-st.sidebar.subheader("Search Settings")
-
-if analysis_mode == "Single Source (Advanced)":
-    search_label = "Search Term (bắt buộc)"
-    search_help = f"{search_hint}. Bắt buộc phải nhập cho chế độ Advanced drill-down."
-else:
-    search_label = "Search Term (tùy chọn)"
-    search_help = f"{search_hint}. 💡 Để trống để quét toàn bộ logs và phát hiện bất thường tự động (khuyến nghị cho main engine)."
+# --- Search Term (always optional) ---
+st.sidebar.subheader("🔍 Search Settings")
 
 search_term = st.sidebar.text_input(
-    search_label,
+    "Search Term (tùy chọn)",
     value="",
-    help=search_help,
-    placeholder=search_hint
+    help="Nhập từ khóa lọc (ví dụ: REJECT, error, SQL Injection). Để trống = quét toàn bộ logs tự động.",
+    placeholder="Để trống = auto-scan toàn bộ"
 )
 
 # Internal limit for retrieval (increased for large-scale analysis)
@@ -216,12 +153,7 @@ bedrock_model = st.sidebar.selectbox(
 # MAIN CONTENT
 # ============================================================
 st.title("📊 AI-Powered Log Analysis System")
-if analysis_mode == "Single Source (Advanced)":
-    st.markdown("🔬 **Advanced Drill-Down Mode** — Deep dive into a specific log source for detailed investigation.")
-    st.info("💡 **Workflow Tip:** Use Multi-Source mode first to discover attack patterns, then switch to Single Source mode to investigate specific sources in detail.")
-else:
-    st.markdown("🎯 **Main Analysis Engine** — Multi-source correlation to detect sophisticated attack patterns across your infrastructure.")
-    st.success("✨ **Recommended:** This is the primary analysis mode. It correlates logs from multiple sources to detect complex threats that single-source analysis might miss.")
+st.markdown("🎯 **Unified Analysis Engine** — Auto-detects threats across all selected sources with AI-powered correlation.")
 
 # ============================================================
 # VALIDATION + ANALYZE
@@ -231,21 +163,11 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
     # --- Input validation ---
     validation_errors = []
 
-    if analysis_mode == "Single Source (Advanced)":
-        if not selected_log_groups or len(selected_log_groups) == 0:
-            validation_errors.append("⚠️ Vui lòng chọn một Log Group cho Advanced drill-down mode.")
-        
-        if not search_term or not search_term.strip():
-            validation_errors.append("⚠️ Search Term là bắt buộc cho chế độ Single Source (Advanced).")
-    else:
-        # Multi-source mode (MAIN ENGINE)
-        if len(selected_log_groups) < 2:
-            validation_errors.append("⚠️ Main engine cần ít nhất 2 log groups để correlation. Chọn thêm sources hoặc chuyển sang Single Source mode.")
-        elif len(selected_log_groups) > 4:
-            validation_errors.append("⚠️ Chọn tối đa 4 log groups để tránh phân tích quá chậm.")
+    if not selected_log_groups:
+        validation_errors.append("⚠️ Vui lòng chọn ít nhất 1 log group.")
 
     if start_dt >= end_dt:
-        validation_errors.append("⚠️ Start Time phải trước End Time. Kiểm tra lại khoảng thời gian.")
+        validation_errors.append("⚠️ Start Time phải trước End Time.")
 
     if validation_errors:
         for err in validation_errors:
@@ -257,239 +179,111 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
         with st.spinner("Analyzing logs..."):
             try:
                 cw_client = CloudWatchClient(region=aws_region, profile=aws_profile)
+                effective_search = search_term.strip() if search_term and search_term.strip() else None
+
+                if not effective_search:
+                    st.info("🔍 Không có search term → Quét toàn bộ logs để phát hiện bất thường tự động")
+
+                # ============================================================
+                # Step 1: Pull logs from all selected sources
+                # ============================================================
+                st.info(f"📂 Pulling logs from {len(selected_log_groups)} sources...")
                 
-                if analysis_mode == "Single Source (Advanced)":
-                    # ============================================================
-                    # SINGLE SOURCE MODE (ADVANCED DRILL-DOWN)
-                    # ============================================================
-                    selected_log_group = selected_log_groups[0]
-                    
-                    st.info(f"🔬 **Advanced Drill-Down:** Pulling logs from **{selected_log_group}**...")
+                all_source_logs = {}
+                total_logs_pulled = 0
+                
+                for log_group in selected_log_groups:
+                    st.info(f"  📂 Pulling from {log_group}...")
                     raw_logs = cw_client.get_logs(
-                        log_group=selected_log_group,
+                        log_group=log_group,
                         start_time=start_dt,
                         end_time=end_dt,
-                        search_term=search_term.strip(),
+                        search_term=effective_search,
                         max_matches=max_matches
                     )
-
-                    if not raw_logs:
-                        st.warning(f"⚠️ No logs found in {selected_log_group} matching '{search_term}' in the selected time range.")
-                        st.session_state.is_analyzing = False
+                    if raw_logs:
+                        all_source_logs[log_group] = raw_logs
+                        total_logs_pulled += len(raw_logs)
+                        st.success(f"    ✅ {len(raw_logs)} logs from {log_group}")
                     else:
-                        st.success(f"✅ Found {len(raw_logs)} matching logs from {selected_log_group}")
-
-                        # Step 2: Parse logs
-                        st.info("🔍 Parsing logs...")
-                        parser = LogParser()
-                        matches = [parser.parse_log_entry(log) for log in raw_logs]
-                        matches = [m for m in matches if m]  # Filter None values
-                        st.success(f"✅ Parsed {len(matches)} log entries")
-
-                        # Step 3: Analyze patterns
-                        st.info("📊 Analyzing patterns...")
-                        analyzer = PatternAnalyzer()
-                        analysis = analyzer.analyze_log_entries(matches)
-                        st.success(f"✅ Found {len(analysis.error_patterns)} error patterns")
-
-                        # Step 4: Detect issues (rule-based)
-                        st.info("🎯 Detecting issues...")
-                        detector = RuleBasedDetector()
-                        issues = detector.detect_issues(analysis)
-                        solutions = detector.generate_basic_solutions(issues)
-                        st.success(f"✅ Detected {len(issues)} issues")
-
-                        # Step 4.5: Build AI context
-                        st.info("🧠 Building AI context...")
-                        preprocessor = LogPreprocessor()
-                        ai_context = preprocessor.prepare_ai_context(
-                            entries=matches,
-                            analysis=analysis,
-                            log_group_name=selected_log_group,
-                            search_term=search_term.strip(),
-                            time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}"
-                        )
-                        st.success(
-                            f"✅ AI context ready — source: {ai_context.source_type}, "
-                            f"high-relevance logs: {ai_context.total_logs_after_scoring}, "
-                            f"suspicious IPs: {len(ai_context.suspicious_ips)}"
-                        )
-
-                        # Step 5: AI Enhancement
-                        enhanced_solutions = solutions
-                        ai_info = None
-
-                        if enable_ai:
-                            st.info("🤖 Enhancing with AI...")
-                            enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
-
-                            if enhancer.is_available():
-                                enhanced_solutions, usage_stats = enhancer.enhance_solutions(
-                                    solutions,
-                                    ai_context=ai_context
-                                )
-
-                                if "error" in usage_stats:
-                                    st.error(f"❌ {usage_stats['error']}")
-                                    st.warning("⚠️ Đã chuyển về chế độ hiển thị Basic Solutions do lỗi Bedrock.")
-                                    ai_info = AIInfo(ai_enhancement_used=False)
-                                else:
-                                    ai_info = AIInfo(
-                                        ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
-                                        bedrock_model_used=usage_stats.get("bedrock_model_used"),
-                                        total_tokens_used=usage_stats.get("total_tokens_used"),
-                                        estimated_total_cost=usage_stats.get("estimated_total_cost"),
-                                        api_calls_made=usage_stats.get("api_calls_made")
-                                    )
-                                    st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
-                            else:
-                                st.warning("⚠️ AWS Bedrock not available, using basic solutions")
-                                ai_info = AIInfo(ai_enhancement_used=False)
-                        else:
-                            ai_info = AIInfo(ai_enhancement_used=False)
-
-                        # Step 6: Create results
-                        metadata = Metadata(
-                            timestamp=datetime.now().isoformat(),
-                            search_term=search_term.strip(),
-                            log_directory=selected_log_group,
-                            total_files_searched=1,
-                            total_matches=len(matches)
-                        )
-
-                        results = AnalysisResult(
-                            metadata=metadata,
-                            matches=matches,
-                            analysis=analysis,
-                            solutions=enhanced_solutions,
-                            ai_info=ai_info
-                        )
-
-                        st.session_state.analysis_result = results
-                        st.success("✅ Analysis complete!")
+                        st.warning(f"    ⚠️ No logs from {log_group}")
                 
+                if total_logs_pulled == 0:
+                    st.warning("⚠️ Không tìm thấy logs nào trong khoảng thời gian đã chọn.")
+                    st.session_state.is_analyzing = False
                 else:
+                    st.success(f"✅ Total: {total_logs_pulled} logs from {len(all_source_logs)} sources")
+                    
                     # ============================================================
-                    # MULTI-SOURCE CORRELATION MODE (MAIN ENGINE)
+                    # Step 2: Parse + Tag with source
                     # ============================================================
-                    st.info(f"🎯 **Main Engine:** Pulling logs from {len(selected_log_groups)} sources for correlation analysis...")
+                    st.info("🔍 Parsing logs...")
+                    parser = LogParser()
+                    all_parsed_entries = []
                     
-                    # Determine if we have a search term or scanning all logs
-                    has_search_term = search_term and search_term.strip()
-                    effective_search = search_term.strip() if has_search_term else None
+                    for log_group, raw_logs in all_source_logs.items():
+                        for log in raw_logs:
+                            entry = parser.parse_log_entry(log)
+                            if entry:
+                                entry.component = log_group
+                                all_parsed_entries.append(entry)
                     
-                    if not has_search_term:
-                        st.info("🔍 Không có search term → Quét toàn bộ logs để phát hiện bất thường tự động")
+                    st.success(f"✅ Parsed {len(all_parsed_entries)} log entries")
                     
-                    # Pull logs from all selected sources
-                    all_source_logs = {}
-                    total_logs_pulled = 0
+                    # ============================================================
+                    # Step 3: Pattern Analysis (clustering + temporal)
+                    # ============================================================
+                    st.info("📊 Analyzing patterns...")
+                    analyzer = PatternAnalyzer()
+                    analysis = analyzer.analyze_log_entries(all_parsed_entries)
                     
-                    for log_group in selected_log_groups:
-                        st.info(f"  📂 Pulling from {log_group}...")
-                        
-                        raw_logs = cw_client.get_logs(
-                            log_group=log_group,
-                            start_time=start_dt,
-                            end_time=end_dt,
-                            search_term=effective_search,
-                            max_matches=max_matches
-                        )
-                        
-                        if raw_logs:
-                            all_source_logs[log_group] = raw_logs
-                            total_logs_pulled += len(raw_logs)
-                            st.success(f"    ✅ {len(raw_logs)} logs from {log_group}")
-                        else:
-                            st.warning(f"    ⚠️ No logs from {log_group}")
+                    reduction_pct = ((len(all_parsed_entries) - len(analysis.error_patterns)) / len(all_parsed_entries) * 100) if all_parsed_entries else 0
+                    st.success(f"✅ Found {len(analysis.error_patterns)} error patterns ({reduction_pct:.1f}% noise reduction)")
                     
-                    if total_logs_pulled == 0:
-                        st.warning("⚠️ Không tìm thấy logs nào từ các sources đã chọn.")
-                        st.session_state.is_analyzing = False
-                    else:
-                        st.success(f"✅ Total: {total_logs_pulled} logs from {len(all_source_logs)} sources")
-                        
-                        # Parse all logs
-                        st.info("🔍 Parsing logs from all sources...")
-                        parser = LogParser()
-                        all_parsed_entries = []
-                        
-                        for log_group, raw_logs in all_source_logs.items():
-                            for log in raw_logs:
-                                entry = parser.parse_log_entry(log)
-                                if entry:
-                                    entry.component = log_group  # Tag with source
-                                    all_parsed_entries.append(entry)
-                        
-                        st.success(f"✅ Parsed {len(all_parsed_entries)} log entries")
-                        
-                        # ============================================================
-                        # NEW: Pattern Clustering (Reduce noise before correlation)
-                        # ============================================================
-                        st.info("📊 Clustering patterns to reduce noise...")
-                        analyzer = PatternAnalyzer()
-                        analysis = analyzer.analyze_log_entries(all_parsed_entries)
-                        
-                        reduction_pct = ((len(all_parsed_entries) - len(analysis.error_patterns)) / len(all_parsed_entries) * 100) if all_parsed_entries else 0
-                        st.success(
-                            f"✅ Clustered into {len(analysis.error_patterns)} patterns "
-                            f"({reduction_pct:.1f}% noise reduction)"
-                        )
-                        
-                        # Display top patterns
-                        if analysis.error_patterns:
-                            st.info("🔍 Top Attack Patterns Detected:")
-                            for i, pattern in enumerate(analysis.error_patterns[:5], 1):
-                                pattern_preview = pattern.pattern[:80] + "..." if len(pattern.pattern) > 80 else pattern.pattern
-                                st.write(f"  {i}. **{pattern_preview}** (Count: {pattern.count}, Source: {pattern.component})")
-                        
+                    if analysis.error_patterns:
+                        st.info("🔍 Top Patterns Detected:")
+                        for i, pattern in enumerate(analysis.error_patterns[:5], 1):
+                            preview = pattern.pattern[:80] + "..." if len(pattern.pattern) > 80 else pattern.pattern
+                            st.write(f"  {i}. **{preview}** (Count: {pattern.count}, Source: {pattern.component})")
+                    
+                    # ============================================================
+                    # Step 4a: Rule-based Issue Detection (always runs)
+                    # ============================================================
+                    st.info("🎯 Detecting issues...")
+                    detector = RuleBasedDetector()
+                    issues = detector.detect_issues(analysis)
+                    solutions = detector.generate_basic_solutions(issues)
+                    st.success(f"✅ Detected {len(issues)} rule-based issues")
+                    
+                    # ============================================================
+                    # Step 4b: Cross-source Correlation (auto when 2+ sources)
+                    # ============================================================
+                    correlated_events = []
+                    correlation_metadata = None
+                    
+                    if len(all_source_logs) >= 2:
                         st.divider()
+                        st.info("🔗 Running cross-source correlation (Advanced)...")
                         
-                        # Run correlation (NOW WITH CLUSTERED PATTERNS)
-                        if st.session_state.correlation_mode == 'advanced':
-                            st.info("🔗 Running Advanced Correlation (with clustered patterns)...")
+                        rules_path = os.path.join(os.path.dirname(__file__), 'correlation_rules.json')
+                        correlator = AdvancedCorrelator(rules_path=rules_path)
+                        
+                        correlated_events = correlator.correlate_multi_source(
+                            log_entries=all_parsed_entries,
+                            clustered_patterns=analysis.error_patterns,
+                            time_window_seconds=3600
+                        )
+                        
+                        st.session_state.advanced_correlated_events = correlated_events
+                        st.success(f"✅ Found {len(correlated_events)} correlated attack patterns")
+                        
+                        if correlated_events:
+                            st.info("🎯 Top Correlated Events:")
+                            for i, event in enumerate(correlated_events[:5], 1):
+                                st.write(f"  {i}. {event.attack_name} (Confidence: {event.confidence_score:.1f}%, Sources: {len(event.sources)})")
                             
-                            # Load correlation rules
-                            rules_path = os.path.join(os.path.dirname(__file__), 'correlation_rules.json')
-                            correlator = AdvancedCorrelator(rules_path=rules_path)
-                            
-                            correlated_events = correlator.correlate_multi_source(
-                                log_entries=all_parsed_entries,
-                                clustered_patterns=analysis.error_patterns,  # NEW: Pass patterns
-                                time_window_seconds=3600  # 1 hour
-                            )
-                            
-                            st.session_state.advanced_correlated_events = correlated_events
-                            st.success(f"✅ Found {len(correlated_events)} correlated attack patterns")
-                            
-                            # Display correlation summary
-                            if correlated_events:
-                                st.info("🎯 Top Correlated Events:")
-                                for i, event in enumerate(correlated_events[:5], 1):
-                                    st.write(f"  {i}. {event.attack_name} (Confidence: {event.confidence_score:.1f}%, Sources: {len(event.sources)})")
-                            
-                            # Build correlation metadata for AI (Priority 1 enhancement)
-                            correlation_metadata = {
-                                'correlated_events': correlated_events,
-                                'correlation_keys_used': ['trace_id', 'request_id', 'session_id', 'instance_id', 'ip'],
-                                'timeline_sequences': [
-                                    {
-                                        'attack_name': e.attack_name,
-                                        'first_event': e.timeline[0]['timestamp'] if e.timeline else None,
-                                        'last_event': e.timeline[-1]['timestamp'] if e.timeline else None,
-                                        'event_count': len(e.timeline),
-                                        'sources': e.sources
-                                    }
-                                    for e in correlated_events
-                                ],
-                                'matched_rules': [e.matched_rules for e in correlated_events if e.matched_rules],
-                                'confidence_scores': [e.confidence_score for e in correlated_events]
-                            }
-                            
-                            # Convert to solutions format for AI enhancement
+                            # Add correlated events as solutions
                             from models import Solution, IssueType
-                            solutions = []
-                            
                             for event in correlated_events:
                                 solution = Solution(
                                     problem=event.attack_name,
@@ -500,109 +294,105 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                                 )
                                 solutions.append(solution)
                             
-                        else:
-                            # Basic IP-based correlation
-                            st.info("🔗 Running Basic Correlation (IP-based)...")
-                            
-                            basic_correlator = MultiLogCorrelator()
-                            multi_context = basic_correlator.correlate_logs(
-                                log_entries=all_parsed_entries,
-                                time_window_seconds=3600
+                            # Build correlation metadata for AI
+                            correlation_metadata = {
+                                'correlated_events': correlated_events,
+                                'correlation_keys_used': ['trace_id', 'request_id', 'session_id', 'instance_id', 'ip'],
+                                'timeline_sequences': [
+                                    {
+                                        'attack_name': e.attack_name,
+                                        'first_event': e.timeline[0].timestamp.strftime('%Y-%m-%d %H:%M:%S') if e.timeline and hasattr(e.timeline[0].timestamp, 'strftime') else str(e.timeline[0].timestamp) if e.timeline else None,
+                                        'last_event': e.timeline[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') if e.timeline and hasattr(e.timeline[-1].timestamp, 'strftime') else str(e.timeline[-1].timestamp) if e.timeline else None,
+                                        'event_count': len(e.timeline),
+                                        'sources': e.sources
+                                    }
+                                    for e in correlated_events
+                                ],
+                                'matched_rules': [e.matched_rules for e in correlated_events if e.matched_rules],
+                                'confidence_scores': [e.confidence_score for e in correlated_events]
+                            }
+                    else:
+                        st.session_state.advanced_correlated_events = []
+                    
+                    # ============================================================
+                    # Step 5: AI Preprocessing
+                    # ============================================================
+                    st.info("🧠 Building AI context...")
+                    preprocessor = LogPreprocessor()
+                    
+                    if len(all_source_logs) > 1:
+                        log_label = f"Multi-Source ({len(selected_log_groups)} sources: {', '.join(selected_log_groups)})"
+                    else:
+                        log_label = selected_log_groups[0]
+                    
+                    ai_context = preprocessor.prepare_ai_context(
+                        entries=all_parsed_entries,
+                        analysis=analysis,
+                        log_group_name=log_label,
+                        search_term=effective_search or "Auto-scan (no search term)",
+                        time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}",
+                        correlation_metadata=correlation_metadata
+                    )
+                    st.success(
+                        f"✅ AI context ready — source: {ai_context.source_type}, "
+                        f"high-relevance logs: {ai_context.total_logs_after_scoring}, "
+                        f"suspicious IPs: {len(ai_context.suspicious_ips)}"
+                    )
+                    
+                    # ============================================================
+                    # Step 6: AI Enhancement
+                    # ============================================================
+                    enhanced_solutions = solutions
+                    ai_info = None
+                    
+                    if enable_ai and solutions:
+                        st.info("🤖 Enhancing with AI...")
+                        enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
+                        
+                        if enhancer.is_available():
+                            enhanced_solutions, usage_stats = enhancer.enhance_solutions(
+                                solutions, ai_context=ai_context
                             )
                             
-                            st.session_state.multi_source_context = multi_context
-                            st.success(f"✅ Found {len(multi_context.correlated_ips)} correlated IPs")
-                            
-                            # Convert to solutions
-                            from models import Solution, IssueType
-                            solutions = []
-                            
-                            for pattern in multi_context.attack_chains:
-                                solution = Solution(
-                                    problem=f"Attack Chain: {pattern.attack_type}",
-                                    issue_type=IssueType.SECURITY,
-                                    affected_components=pattern.sources,
-                                    solution=f"Detected {pattern.event_count} events across {len(pattern.sources)} sources. IPs: {', '.join(pattern.ips[:5])}",
-                                    ai_enhanced=False
-                                )
-                                solutions.append(solution)
-                        
-                        # AI Enhancement for correlated events
-                        enhanced_solutions = solutions
-                        ai_info = None
-                        
-                        if enable_ai and solutions:
-                            st.info("🤖 Enhancing correlated events with AI...")
-                            
-                            # Build multi-source AI context with correlation metadata
-                            preprocessor = LogPreprocessor()
-                            analyzer = PatternAnalyzer()
-                            analysis = analyzer.analyze_log_entries(all_parsed_entries)
-                            
-                            # Pass correlation_metadata to AI context (Priority 1 enhancement)
-                            ai_context = preprocessor.prepare_ai_context(
-                                entries=all_parsed_entries,
-                                analysis=analysis,
-                                log_group_name=f"Multi-Source ({len(selected_log_groups)} sources)",
-                                search_term=effective_search or "Auto-scan (no search term)",
-                                time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}",
-                                correlation_metadata=correlation_metadata if st.session_state.correlation_mode == 'advanced' else None
-                            )
-                            
-                            enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
-                            
-                            if enhancer.is_available():
-                                enhanced_solutions, usage_stats = enhancer.enhance_solutions(
-                                    solutions,
-                                    ai_context=ai_context
-                                )
-                                
-                                if "error" in usage_stats:
-                                    st.error(f"❌ {usage_stats['error']}")
-                                    ai_info = AIInfo(ai_enhancement_used=False)
-                                else:
-                                    ai_info = AIInfo(
-                                        ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
-                                        bedrock_model_used=usage_stats.get("bedrock_model_used"),
-                                        total_tokens_used=usage_stats.get("total_tokens_used"),
-                                        estimated_total_cost=usage_stats.get("estimated_total_cost"),
-                                        api_calls_made=usage_stats.get("api_calls_made")
-                                    )
-                                    st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
-                            else:
-                                st.warning("⚠️ AWS Bedrock not available")
+                            if "error" in usage_stats:
+                                st.error(f"❌ {usage_stats['error']}")
                                 ai_info = AIInfo(ai_enhancement_used=False)
+                            else:
+                                ai_info = AIInfo(
+                                    ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
+                                    bedrock_model_used=usage_stats.get("bedrock_model_used"),
+                                    total_tokens_used=usage_stats.get("total_tokens_used"),
+                                    estimated_total_cost=usage_stats.get("estimated_total_cost"),
+                                    api_calls_made=usage_stats.get("api_calls_made")
+                                )
+                                st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
                         else:
+                            st.warning("⚠️ AWS Bedrock not available")
                             ai_info = AIInfo(ai_enhancement_used=False)
-                        
-                        # Create results
-                        metadata = Metadata(
-                            timestamp=datetime.now().isoformat(),
-                            search_term=effective_search or "Auto-scan (all logs)",
-                            log_directory=f"Multi-Source: {', '.join(selected_log_groups)}",
-                            total_files_searched=len(selected_log_groups),
-                            total_matches=len(all_parsed_entries)
-                        )
-                        
-                        # Use empty analysis for multi-source (correlation results are in solutions)
-                        from models import LogAnalysis
-                        analysis = LogAnalysis(
-                            total_entries=len(all_parsed_entries),
-                            error_patterns=[],
-                            severity_distribution={},
-                            components={}
-                        )
-                        
-                        results = AnalysisResult(
-                            metadata=metadata,
-                            matches=all_parsed_entries,
-                            analysis=analysis,
-                            solutions=enhanced_solutions,
-                            ai_info=ai_info
-                        )
-                        
-                        st.session_state.analysis_result = results
-                        st.success("✅ Multi-source correlation complete!")
+                    else:
+                        ai_info = AIInfo(ai_enhancement_used=False)
+                    
+                    # ============================================================
+                    # Step 7: Create Results
+                    # ============================================================
+                    metadata = Metadata(
+                        timestamp=datetime.now().isoformat(),
+                        search_term=effective_search or "Auto-scan (all logs)",
+                        log_directory=', '.join(selected_log_groups),
+                        total_files_searched=len(selected_log_groups),
+                        total_matches=len(all_parsed_entries)
+                    )
+                    
+                    results = AnalysisResult(
+                        metadata=metadata,
+                        matches=all_parsed_entries,
+                        analysis=analysis,
+                        solutions=enhanced_solutions,
+                        ai_info=ai_info
+                    )
+                    
+                    st.session_state.analysis_result = results
+                    st.success("✅ Analysis complete!")
 
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
@@ -614,7 +404,8 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
 # ============================================================
 # RESULTS TABS
 # ============================================================
-if analysis_mode == "Multi-Source Correlation" and st.session_state.correlation_mode == 'advanced':
+has_correlation = bool(st.session_state.advanced_correlated_events)
+if has_correlation:
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "🔗 Correlation", "📊 Analysis", "🔧 Solutions"])
 else:
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "📊 Analysis", "🔧 Solutions", "ℹ️ Info"])
@@ -646,14 +437,13 @@ else:
         
         st.divider()
         
-        # Multi-source specific summary (MAIN ENGINE)
-        if analysis_mode == "Multi-Source Correlation":
-            st.subheader("🎯 Main Engine Analysis Summary")
+        # Correlation summary (when available)
+        if has_correlation:
+            st.subheader("🎯 Analysis Summary")
             st.info(f"**Sources Analyzed:** {result.metadata.log_directory}")
             st.info(f"**Search Term:** {result.metadata.search_term}")
-            st.info(f"**Correlation Engine:** {st.session_state.correlation_mode.upper()}")
             
-            if st.session_state.correlation_mode == 'advanced' and st.session_state.advanced_correlated_events:
+            if st.session_state.advanced_correlated_events:
                 st.metric("Correlated Attack Patterns", len(st.session_state.advanced_correlated_events))
                 
                 # Top attacks by confidence
@@ -709,8 +499,8 @@ else:
                 mime="text/csv"
             )
 
-    # Correlation Tab (only for advanced multi-source mode)
-    if analysis_mode == "Multi-Source Correlation" and st.session_state.correlation_mode == 'advanced':
+    # Correlation Tab (auto when correlation data exists)
+    if has_correlation:
         with tab2:
             st.subheader("🔗 Advanced Correlation Results")
             
@@ -743,8 +533,15 @@ else:
                         # Timeline
                         st.markdown("**Attack Timeline:**")
                         for j, timeline_event in enumerate(event.timeline, 1):
-                            delay_info = f" (+{timeline_event.get('delay_seconds', 0):.1f}s)" if j > 1 else ""
-                            st.write(f"{j}. [{timeline_event['timestamp']}] **{timeline_event['source']}**: {timeline_event['message'][:100]}...{delay_info}")
+                            # Calculate delay from previous event
+                            if j > 1:
+                                delay = (timeline_event.timestamp - event.timeline[j-2].timestamp).total_seconds()
+                                delay_info = f" (+{delay:.1f}s)"
+                            else:
+                                delay_info = ""
+                            ts_str = timeline_event.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(timeline_event.timestamp, 'strftime') else str(timeline_event.timestamp)
+                            msg = (timeline_event.message or '')[:100]
+                            st.write(f"{j}. [{ts_str}] **{timeline_event.source}**: {msg}...{delay_info}")
                         
                         # Matched rules
                         if event.matched_rules:
@@ -759,13 +556,13 @@ else:
                         # Evidence
                         if event.evidence:
                             st.markdown("**Evidence:**")
-                            for evidence in event.evidence[:5]:
-                                st.code(evidence, language='text')
+                            for ev_item in event.evidence[:5]:
+                                st.code(ev_item, language='text')
         
         # Analysis tab becomes tab3
         analysis_tab = tab3
     else:
-        # For single source, tab2 is analysis
+        # No correlation, tab2 is analysis
         analysis_tab = tab2
 
     with analysis_tab:

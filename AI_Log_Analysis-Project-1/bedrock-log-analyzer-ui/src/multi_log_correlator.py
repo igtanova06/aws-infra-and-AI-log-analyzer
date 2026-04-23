@@ -320,7 +320,7 @@ class MultiLogCorrelator:
         elif has_access_denied and has_vpc_rejects:
             event_type = "unauthorized_access_attempt"
             severity = "HIGH"
-        elif has_app_errors and has_db_events:
+        elif has_app_errors and db_events:
             event_type = "application_database_issue"
             severity = "MEDIUM"
         else:

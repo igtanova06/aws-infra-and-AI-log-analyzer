@@ -423,9 +423,31 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         
                         st.success(f"✅ Parsed {len(all_parsed_entries)} log entries")
                         
-                        # Run correlation
+                        # ============================================================
+                        # NEW: Pattern Clustering (Reduce noise before correlation)
+                        # ============================================================
+                        st.info("📊 Clustering patterns to reduce noise...")
+                        analyzer = PatternAnalyzer()
+                        analysis = analyzer.analyze_log_entries(all_parsed_entries)
+                        
+                        reduction_pct = ((len(all_parsed_entries) - len(analysis.error_patterns)) / len(all_parsed_entries) * 100) if all_parsed_entries else 0
+                        st.success(
+                            f"✅ Clustered into {len(analysis.error_patterns)} patterns "
+                            f"({reduction_pct:.1f}% noise reduction)"
+                        )
+                        
+                        # Display top patterns
+                        if analysis.error_patterns:
+                            st.info("🔍 Top Attack Patterns Detected:")
+                            for i, pattern in enumerate(analysis.error_patterns[:5], 1):
+                                pattern_preview = pattern.pattern[:80] + "..." if len(pattern.pattern) > 80 else pattern.pattern
+                                st.write(f"  {i}. **{pattern_preview}** (Count: {pattern.count}, Source: {pattern.component})")
+                        
+                        st.divider()
+                        
+                        # Run correlation (NOW WITH CLUSTERED PATTERNS)
                         if st.session_state.correlation_mode == 'advanced':
-                            st.info("🔗 Running Advanced Correlation (Trace ID + Timeline + Rules)...")
+                            st.info("🔗 Running Advanced Correlation (with clustered patterns)...")
                             
                             # Load correlation rules
                             rules_path = os.path.join(os.path.dirname(__file__), 'correlation_rules.json')
@@ -433,6 +455,7 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                             
                             correlated_events = correlator.correlate_multi_source(
                                 log_entries=all_parsed_entries,
+                                clustered_patterns=analysis.error_patterns,  # NEW: Pass patterns
                                 time_window_seconds=3600  # 1 hour
                             )
                             

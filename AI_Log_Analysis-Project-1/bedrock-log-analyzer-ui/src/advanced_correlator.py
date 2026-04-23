@@ -360,6 +360,74 @@ class AdvancedCorrelator:
         
         return correlated_events
     
+    def correlate_multi_source(
+        self,
+        log_entries: List[LogEntry],
+        clustered_patterns: Optional[List] = None,
+        time_window_seconds: int = 3600
+    ) -> List[AdvancedCorrelatedEvent]:
+        """
+        Multi-source correlation with optional pattern clustering.
+        
+        Args:
+            log_entries: List of parsed log entries from multiple sources
+            clustered_patterns: Pre-clustered patterns (optional, for noise reduction)
+            time_window_seconds: Time window for correlation (default: 1 hour)
+        
+        Returns:
+            List of AdvancedCorrelatedEvent
+        """
+        # If patterns provided, filter log entries to significant ones
+        filtered_entries = log_entries
+        
+        if clustered_patterns:
+            # Filter to only include entries matching significant patterns (count >= 5)
+            significant_patterns = [p for p in clustered_patterns if p.count >= 5]
+            
+            if significant_patterns:
+                # Create pattern signatures for fast lookup
+                pattern_signatures = set()
+                for pattern in significant_patterns:
+                    signature = self._extract_pattern_signature(pattern.pattern)
+                    pattern_signatures.add(signature)
+                
+                # Filter log entries
+                filtered = []
+                for entry in log_entries:
+                    entry_text = entry.message or entry.content or ""
+                    entry_signature = self._extract_pattern_signature(entry_text)
+                    if entry_signature in pattern_signatures:
+                        filtered.append(entry)
+                
+                if filtered:
+                    filtered_entries = filtered
+                    print(f"Pattern filtering: {len(filtered_entries)}/{len(log_entries)} entries match significant patterns")
+        
+        # Group entries by source for correlation
+        entries_by_source = {}
+        for entry in filtered_entries:
+            source = entry.component or "unknown"
+            if source not in entries_by_source:
+                entries_by_source[source] = []
+            entries_by_source[source].append(entry)
+        
+        # Build log_sources format for correlate_advanced
+        from models import AnalysisData
+        log_sources = {}
+        
+        for source, entries in entries_by_source.items():
+            # Create minimal AnalysisData
+            analysis = AnalysisData(
+                total_entries=len(entries),
+                error_patterns=[],
+                severity_distribution={},
+                components={}
+            )
+            log_sources[source] = (entries, analysis)
+        
+        # Use existing correlate_advanced logic
+        return self.correlate_advanced(log_sources)
+    
     # ---- Internal Methods ----
     
     def _extract_rich_keys(
@@ -713,3 +781,30 @@ class AdvancedCorrelator:
         """Generate unique correlation ID"""
         data = f"{correlation_key}-{len(timeline)}-{timeline[0].timestamp}"
         return f"CORR-{hashlib.md5(data.encode()).hexdigest()[:12]}"
+    
+    def _extract_pattern_signature(self, text: str) -> str:
+        """
+        Extract pattern signature by removing variable parts.
+        
+        Example:
+            "SQL injection at 10:23:15 from 203.0.113.42" 
+            → "sql injection"
+        """
+        if not text:
+            return ""
+        
+        # Remove timestamps
+        text = re.sub(r'\d{2}:\d{2}:\d{2}', '', text)
+        text = re.sub(r'\d{4}-\d{2}-\d{2}', '', text)
+        
+        # Remove IPs
+        text = re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '', text)
+        
+        # Remove numbers
+        text = re.sub(r'\b\d+\b', '', text)
+        
+        # Extract key terms (lowercase, remove extra spaces)
+        text = ' '.join(text.lower().split())
+        
+        # Keep only first 50 chars
+        return text[:50]

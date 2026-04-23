@@ -1181,3 +1181,961 @@ TOTAL COST: $0.0187 (Bedrock API call)
 - 💰 **Cost-effective** — $0.02 per analysis with 86% token savings
 - 🎯 **Actionable** — One-click commands to block attacker immediately
 - 📊 **Comprehensive** — Evidence + Timeline + Metrics + Prevention strategy
+
+
+---
+
+## 11. Multi-Source Correlation Mode - Detailed Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    🧩 MULTI-SOURCE CORRELATION MODE                              │
+│                    Advanced Attack Detection Across Log Sources                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+USER ACTION: Chọn "Multi-Source Correlation" mode trong Streamlit
+             Select 2-4 log groups (VPC Flow, CloudTrail, Application, Database)
+             Click "🚀 Analyze Logs"
+
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 1: 📥 PARALLEL LOG COLLECTION (Concurrent)
+═══════════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  CloudWatch Client (concurrent_fetch)                                        │
+│  Pulls logs from multiple log groups simultaneously                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┬──────────────────┐
+              │                  │                  │                  │
+              ▼                  ▼                  ▼                  ▼
+    ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+    │  /aws/vpc/      │ │  /aws/          │ │  /aws/ec2/      │ │  /aws/rds/      │
+    │  flowlogs       │ │  cloudtrail/    │ │  application    │ │  mysql/error    │
+    │                 │ │  logs           │ │                 │ │                 │
+    │  VPC Flow Logs  │ │  CloudTrail     │ │  App Logs       │ │  DB Logs        │
+    │  (Network)      │ │  (API Audit)    │ │  (Web/Backend)  │ │  (Database)     │
+    └────────┬────────┘ └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+             │                   │                   │                   │
+             │ Parse             │ Parse             │ Parse             │ Parse
+             ▼                   ▼                   ▼                   ▼
+    ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+    │ LogEntry[]      │ │ LogEntry[]      │ │ LogEntry[]      │ │ LogEntry[]      │
+    │ • timestamp     │ │ • timestamp     │ │ • timestamp     │ │ • timestamp     │
+    │ • severity      │ │ • severity      │ │ • severity      │ │ • severity      │
+    │ • message       │ │ • message       │ │ • message       │ │ • message       │
+    │ • source_ip     │ │ • user_arn      │ │ • trace_id      │ │ • instance_id   │
+    │ • dest_ip       │ │ • api_action    │ │ • request_id    │ │ • query_time    │
+    └────────┬────────┘ └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+             │                   │                   │                   │
+             └───────────────────┴───────────────────┴───────────────────┘
+                                         │
+                                         │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 2: � PATTERN CLUSTERING (PatternAnalyzer) ⭐ RECOMMENDED
+═══════════════════════════════════════════════════════════════════════════════════
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  PatternAnalyzer        │
+                            │  Cluster similar logs   │
+                            │  100,000 → 50 patterns  │
+                            └────────────┬────────────┘
+                                         │
+                    ┌────────────────────┴────────────────────┐
+                    │  Benefits:                              │
+                    │  • Reduce noise (99.95% reduction)      │
+                    │  • Identify attack patterns             │
+                    │  • Improve correlation accuracy         │
+                    │  • Faster AI processing                 │
+                    └────────────────────┬────────────────────┘
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  Clustered Patterns     │
+                            │                         │
+                            │  Pattern 1:             │
+                            │  • "SQL injection"      │
+                            │  • Count: 500           │
+                            │  • Component: App       │
+                            │                         │
+                            │  Pattern 2:             │
+                            │  • "VPC REJECT port 22" │
+                            │  • Count: 300           │
+                            │  • Component: Network   │
+                            │                         │
+                            │  Pattern 3:             │
+                            │  • "Connection timeout" │
+                            │  • Count: 200           │
+                            │  • Component: DB        │
+                            └────────────┬────────────┘
+                                         │
+                                         │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 3: �🔍 RICH CORRELATION KEY EXTRACTION (AdvancedCorrelator)
+═══════════════════════════════════════════════════════════════════════════════════
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  _extract_rich_keys()   │
+                            │  Extract from patterns  │
+                            │  (not individual logs)  │
+                            └────────────┬────────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    │                    │                    │
+                    ▼                    ▼                    ▼
+        ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+        │ PRIMARY KEYS      │  │ SECONDARY KEYS    │  │ CONTEXTUAL KEYS   │
+        │ (Strongest)       │  │ (Medium)          │  │ (Weakest)         │
+        │                   │  │                   │  │                   │
+        │ • trace_ids[]     │  │ • ip_addresses[]  │  │ • user_agents[]   │
+        │   X-Trace-Id      │  │   (public only)   │  │   Browser info    │
+        │   X-Request-Id    │  │                   │  │                   │
+        │                   │  │ • user_arns[]     │  │ • api_actions[]   │
+        │ • request_ids[]   │  │   IAM users       │  │   AWS API calls   │
+        │   Request corr.   │  │                   │  │                   │
+        │                   │  │ • instance_ids[]  │  │ • timestamps[]    │
+        │ • session_ids[]   │  │   EC2 instances   │  │   Temporal data   │
+        │   User session    │  │                   │  │                   │
+        └───────────────────┘  └───────────────────┘  └───────────────────┘
+                    │                    │                    │
+                    └────────────────────┴────────────────────┘
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  RichCorrelationKey     │
+                            │  per Log Source         │
+                            │                         │
+                            │  VPC Flow:              │
+                            │  • IPs: [203.0.113.42]  │
+                            │  • trace_ids: []        │
+                            │                         │
+                            │  Application:           │
+                            │  • IPs: [203.0.113.42]  │
+                            │  • trace_ids: [abc123]  │
+                            │  • request_ids: [req1]  │
+                            │                         │
+                            │  CloudTrail:            │
+                            │  • IPs: [203.0.113.42]  │
+                            │  • user_arns: [arn:...] │
+                            └────────────┬────────────┘
+                                         │
+                                         │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 4: 🧩 TIMELINE BUILDING (Priority-Based Correlation)
+═══════════════════════════════════════════════════════════════════════════════════
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  _build_timelines()     │
+                            │  Priority Matching:     │
+                            │  1. trace_id (STRONG)   │
+                            │  2. request_id (MEDIUM) │
+                            │  3. session_id (MEDIUM) │
+                            │  4. instance_id (MEDIUM)│
+                            │  5. IP address (WEAK)   │
+                            └────────────┬────────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    │                    │                    │
+                    ▼                    ▼                    ▼
+        ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+        │ Timeline for      │  │ Timeline for      │  │ Timeline for      │
+        │ trace:abc123      │  │ ip:203.0.113.42   │  │ instance:i-abc123 │
+        │ (STRONG)          │  │ (WEAK)            │  │ (MEDIUM)          │
+        │                   │  │                   │  │                   │
+        │ Events:           │  │ Events:           │  │ Events:           │
+        │ 1. 10:23:15       │  │ 1. 10:23:10       │  │ 1. 10:20:00       │
+        │    vpc_flow       │  │    vpc_flow       │  │    application    │
+        │    network_reject │  │    network_reject │  │    connection_    │
+        │    CRITICAL       │  │    HIGH           │  │    timeout        │
+        │                   │  │                   │  │    HIGH           │
+        │ 2. 10:23:18       │  │ 2. 10:23:20       │  │                   │
+        │    application    │  │    cloudtrail     │  │ 2. 10:20:05       │
+        │    sql_injection  │  │    api_deny       │  │    database       │
+        │    CRITICAL       │  │    HIGH           │  │    too_many_conn  │
+        │                   │  │                   │  │    HIGH           │
+        │ 3. 10:23:25       │  │ 3. 10:23:30       │  │                   │
+        │    cloudtrail     │  │    application    │  └───────────────────┘
+        │    api_deny       │  │    sql_injection  │
+        │    HIGH           │  │    CRITICAL       │
+        └───────────────────┘  └───────────────────┘
+                    │                    │                    │
+                    └────────────────────┴────────────────────┘
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  TimelineEvent[]        │
+                            │  (Sorted by timestamp)  │
+                            │                         │
+                            │  Each event contains:   │
+                            │  • timestamp            │
+                            │  • source (vpc_flow)    │
+                            │  • event_type           │
+                            │  • severity             │
+                            │  • actor (IP/trace_id)  │
+                            │  • message              │
+                            │  • metadata             │
+                            └────────────┬────────────┘
+                                         │
+                                         │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 5: 🎯 RULE ENGINE EVALUATION (Config-Driven Detection)
+═══════════════════════════════════════════════════════════════════════════════════
+                                         │
+                                         ▼
+                            ┌─────────────────────────┐
+                            │  RuleEngine.evaluate()  │
+                            │  Load from:             │
+                            │  correlation_rules.json │
+                            └────────────┬────────────┘
+                                         │
+              ┌──────────────────────────┼──────────────────────────┐
+              │                          │                          │
+              ▼                          ▼                          ▼
+    ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+    │  Rule R001      │      │  Rule R002      │      │  Rule R004      │
+    │  Reconnaissance │      │  Privilege      │      │  App-DB Issue   │
+    │  to Exploit     │      │  Escalation     │      │                 │
+    │                 │      │                 │      │                 │
+    │ Required:       │      │ Required:       │      │ Required:       │
+    │ • vpc_flow      │      │ • cloudtrail    │      │ • application   │
+    │ • application   │      │ • application   │      │ • database      │
+    │                 │      │                 │      │                 │
+    │ Sequence:       │      │ Sequence:       │      │ Sequence:       │
+    │ 1. network_     │      │ 1. api_deny     │      │ 1. connection_  │
+    │    reject       │      │ 2. unauthorized │      │    timeout      │
+    │ 2. sql_         │      │    _access      │      │ 2. too_many_    │
+    │    injection    │      │                 │      │    connections  │
+    │                 │      │                 │      │                 │
+    │ Max Gap: 300s   │      │ Max Gap: 600s   │      │ Max Gap: 60s    │
+    │                 │      │                 │      │                 │
+    │ Base Conf: 70%  │      │ Base Conf: 65%  │      │ Base Conf: 80%  │
+    │                 │      │                 │      │                 │
+    │ Modifiers:      │      │ Modifiers:      │      │ Modifiers:      │
+    │ • trace_id: +20 │      │ • user_arn: +25 │      │ • instance: +15 │
+    │ • automated:+10 │      │ • repeated: +15 │      │ • high_freq:+10 │
+    └────────┬────────┘      └────────┬────────┘      └────────┬────────┘
+             │                        │                        │
+             │ MATCH! ✅              │ NO MATCH ❌            │ NO MATCH ❌
+             │ Confidence: 90%        │                        │
+             │ (70 + 20 trace_id)     │                        │
+             │                        │                        │
+             └────────────────────────┴────────────────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  Matched Rules[]        │
+                         │  (Sorted by confidence) │
+                         │                         │
+                         │  1. R001: 90%           │
+                         │     Reconnaissance      │
+                         │     to Exploit          │
+                         │                         │
+                         │  MITRE ATT&CK:          │
+                         │  • TA0001 (Initial)     │
+                         │  • T1190 (Exploit)      │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 6: 📊 ATTACK SEQUENCE DETECTION (Temporal Analysis)
+═══════════════════════════════════════════════════════════════════════════════════
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  _detect_sequences()    │
+                         │  Analyze timing:        │
+                         │  • Total duration       │
+                         │  • Average delay        │
+                         │  • Is automated?        │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────┴────────────┐
+                         │  Timing Calculation:    │
+                         │                         │
+                         │  Event 1: 10:23:15      │
+                         │  Event 2: 10:23:18      │
+                         │  Event 3: 10:23:25      │
+                         │                         │
+                         │  Delays:                │
+                         │  • E1→E2: 3 seconds     │
+                         │  • E2→E3: 7 seconds     │
+                         │                         │
+                         │  Average: 5 seconds     │
+                         │  Total: 10 seconds      │
+                         │                         │
+                         │  Is Automated?          │
+                         │  avg_delay < 5s → YES ✅│
+                         │  (Bot/Script detected)  │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  AttackSequence         │
+                         │                         │
+                         │  sequence_id: SEQ-R001  │
+                         │  pattern: Recon→Exploit │
+                         │  events: 3              │
+                         │  confidence: 90%        │
+                         │                         │
+                         │  total_duration: 10s    │
+                         │  average_delay: 5s      │
+                         │  is_automated: true     │
+                         │                         │
+                         │  mitre_tactics:         │
+                         │  • TA0001 (Initial)     │
+                         │  • TA0002 (Execution)   │
+                         │                         │
+                         │  mitre_techniques:      │
+                         │  • T1190 (Exploit)      │
+                         │  • T1059 (Command)      │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 7: 🧠 CONTEXT & INTENT ANALYSIS
+═══════════════════════════════════════════════════════════════════════════════════
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  _determine_intent()    │
+                         │  Classify attacker goal │
+                         └────────────┬────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+              ▼                       ▼                       ▼
+    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+    │ data_theft      │   │ privilege_      │   │ denial_of_      │
+    │                 │   │ escalation      │   │ service         │
+    │ Indicators:     │   │                 │   │                 │
+    │ • sql_injection │   │ Indicators:     │   │ Indicators:     │
+    │ • data_exfil    │   │ • api_deny      │   │ • network_      │
+    │                 │   │ • unauthorized  │   │   reject > 10   │
+    └─────────────────┘   └─────────────────┘   └─────────────────┘
+              │                       │                       │
+              └───────────────────────┴───────────────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  _build_context()       │
+                         │  Rich metadata:         │
+                         │                         │
+                         │  • total_events: 3      │
+                         │  • sources: [vpc, app]  │
+                         │  • severity_dist:       │
+                         │    CRITICAL: 2          │
+                         │    HIGH: 1              │
+                         │  • event_types:         │
+                         │    [network_reject,     │
+                         │     sql_injection]      │
+                         │  • first_seen: 10:23:15 │
+                         │  • last_seen: 10:23:25  │
+                         │  • duration: 0.17 min   │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 8: 🎨 CORRELATED EVENT ASSEMBLY
+═══════════════════════════════════════════════════════════════════════════════════
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  AdvancedCorrelatedEvent│
+                         │                         │
+                         │  correlation_id:        │
+                         │  CORR-abc123def456      │
+                         │                         │
+                         │  primary_key:           │
+                         │  trace:abc123           │
+                         │                         │
+                         │  correlation_strength:  │
+                         │  STRONG                 │
+                         │                         │
+                         │  timeline:              │
+                         │  [TimelineEvent × 3]    │
+                         │                         │
+                         │  attack_sequences:      │
+                         │  [AttackSequence × 1]   │
+                         │                         │
+                         │  event_type:            │
+                         │  coordinated_attack     │
+                         │                         │
+                         │  severity: CRITICAL     │
+                         │  confidence: 90%        │
+                         │                         │
+                         │  intent: data_theft     │
+                         │                         │
+                         │  context: {...}         │
+                         │                         │
+                         │  evidence_by_source:    │
+                         │  • vpc_flow: [...]      │
+                         │  • application: [...]   │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+═══════════════════════════════════════════════════════════════════════════════════
+PHASE 9: 🤖 AI ENHANCEMENT (Optional - If Enabled)
+═══════════════════════════════════════════════════════════════════════════════════
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  BedrockEnhancer        │
+                         │  (Same as Single-Source)│
+                         │                         │
+                         │  Input: Correlated Event│
+                         │  + Timeline             │
+                         │  + Attack Sequences     │
+                         │  + MITRE ATT&CK         │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  AWS Bedrock API        │
+                         │  Claude 3.5 Sonnet      │
+                         │                         │
+                         │  Enhanced with:         │
+                         │  • Root cause analysis  │
+                         │  • Remediation steps    │
+                         │  • Prevention strategy  │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  ai_summary:            │
+                         │  "Coordinated attack    │
+                         │   detected across       │
+                         │   network and app       │
+                         │   layers..."            │
+                         │                         │
+                         │  ai_recommendations:    │
+                         │  • Block IP in WAF      │
+                         │  • Enable GuardDuty     │
+                         │  • Review app code      │
+                         └────────────┬────────────┘
+                                      │
+                                      │
+═══════════════════════════════════════════════════════════════════════════════════
+FINAL OUTPUT: 📊 STREAMLIT DASHBOARD (Multi-Source Tab)
+═══════════════════════════════════════════════════════════════════════════════════
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  Tab: 🧩 Correlation    │
+                         └────────────┬────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+              ▼                       ▼                       ▼
+    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+    │ Correlated      │   │ Attack Timeline │   │ Evidence by     │
+    │ Events Summary  │   │ Visualization   │   │ Source          │
+    │                 │   │                 │   │                 │
+    │ 🚨 Event #1     │   │ 10:23:15        │   │ VPC Flow:       │
+    │ Coordinated     │   │ ├─ network_     │   │ • 1 REJECT      │
+    │ Attack          │   │ │  reject       │   │                 │
+    │                 │   │ │  (vpc_flow)   │   │ Application:    │
+    │ Actor:          │   │ │               │   │ • 1 SQL inj.    │
+    │ trace:abc123    │   │ 10:23:18        │   │                 │
+    │                 │   │ ├─ sql_         │   │ CloudTrail:     │
+    │ Strength: STRONG│   │ │  injection    │   │ • 1 API deny    │
+    │ Confidence: 90% │   │ │  (application)│   │                 │
+    │                 │   │ │               │   └─────────────────┘
+    │ Severity:       │   │ 10:23:25        │
+    │ CRITICAL        │   │ └─ api_deny     │
+    │                 │   │    (cloudtrail) │
+    │ Intent:         │   │                 │
+    │ data_theft      │   │ Duration: 10s   │
+    │                 │   │ Automated: YES  │
+    │ MITRE:          │   │                 │
+    │ • TA0001        │   └─────────────────┘
+    │ • T1190         │
+    │                 │
+    │ Attack Chain:   │
+    │ 1. Network      │
+    │    scanning     │
+    │ 2. SQL inject   │
+    │ 3. API abuse    │
+    │                 │
+    │ Recommendations:│
+    │ • Block IP      │
+    │ • Enable WAF    │
+    │ • Review code   │
+    └─────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         🎯 KEY DIFFERENCES vs Single-Source                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┬──────────────────────┬──────────────────────────────────┐
+│  Feature             │  Single-Source       │  Multi-Source Correlation        │
+├──────────────────────┼──────────────────────┼──────────────────────────────────┤
+│  Log Sources         │  1 log group         │  2-4 log groups (parallel)       │
+│  Correlation         │  None                │  Rich keys (trace_id > IP)       │
+│  Timeline            │  Single source       │  Cross-source timeline           │
+│  Rule Engine         │  Basic keywords      │  Config-driven sequences         │
+│  Attack Detection    │  Pattern-based       │  Sequence + timing analysis      │
+│  Confidence Scoring  │  Simple              │  Multi-factor (source + events)  │
+│  MITRE Mapping       │  AI-generated        │  Rule-based + AI-enhanced        │
+│  Intent Detection    │  AI-inferred         │  Timeline + sequence analysis    │
+│  Automation Detect   │  No                  │  Yes (timing analysis)           │
+│  Evidence            │  Single source       │  Grouped by source               │
+│  Use Case            │  Deep dive           │  Attack discovery                │
+└──────────────────────┴──────────────────────┴──────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         💡 EXAMPLE: Real Attack Correlation                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+10:23:10 - VPC Flow Log
+  203.0.113.42 → 10.0.1.55:22 REJECT
+  (Attacker tries SSH - blocked by Security Group)
+
+10:23:15 - VPC Flow Log
+  203.0.113.42 → 10.0.1.55:80 ACCEPT
+  (Attacker switches to HTTP - allowed)
+
+10:23:18 - Application Log
+  [ERROR] SQL Injection detected: GET /api/login.php?id=1' UNION SELECT...
+  Source IP: 203.0.113.42
+  Trace-ID: abc123def456
+  (Attacker exploits web app)
+
+10:23:25 - CloudTrail
+  {
+    "eventName": "DeleteVpc",
+    "errorCode": "AccessDenied",
+    "sourceIPAddress": "203.0.113.42",
+    "userIdentity": {"type": "AssumedRole"}
+  }
+  (Attacker tries to delete VPC - denied)
+
+═══════════════════════════════════════════════════════════════════════════════════
+CORRELATION RESULT:
+═══════════════════════════════════════════════════════════════════════════════════
+
+✅ Correlated by: IP (203.0.113.42) + Trace-ID (abc123def456)
+✅ Correlation Strength: STRONG (trace_id present)
+✅ Matched Rule: R001 - Reconnaissance to Exploit
+✅ Confidence: 90% (70 base + 20 trace_id)
+✅ Attack Sequence: 4 events in 15 seconds
+✅ Automated: YES (avg delay 5s)
+✅ Intent: data_theft + privilege_escalation
+✅ MITRE: TA0001 (Initial Access), T1190 (Exploit Public App)
+
+🚨 ALERT: Coordinated multi-layer attack detected!
+   Attacker progressed from network scanning → web exploit → API abuse
+   in 15 seconds. Automated bot behavior confirmed.
+
+📋 RECOMMENDATIONS:
+   1. IMMEDIATE: Block 203.0.113.42 in WAF
+   2. INVESTIGATE: Check for data exfiltration
+   3. HARDEN: Enable AWS GuardDuty
+   4. FIX: Review /api/login.php for SQL injection
+   5. MONITOR: Set up CloudWatch alarm for similar patterns
+```
+
+---
+
+**Legend:**
+- 🧩 Multi-Source Correlation
+- 🔍 Rich Key Extraction
+- 🎯 Rule Engine
+- 📊 Timeline Analysis
+- 🤖 AI Enhancement
+- ⚡ Automated Detection
+- 🚨 Critical Alert
+
+
+
+---
+
+## 12. When to Use Multi-Source vs Single-Source Mode
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    🎯 MODE SELECTION DECISION TREE                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+                              START: Bạn cần phân tích logs
+                                          │
+                                          ▼
+                              ┌───────────────────────┐
+                              │  Bạn biết chính xác   │
+                              │  vấn đề ở đâu không?  │
+                              └───────────┬───────────┘
+                                          │
+                    ┌─────────────────────┴─────────────────────┐
+                    │                                           │
+                    ▼ BIẾT                                      ▼ KHÔNG BIẾT
+        ┌───────────────────────┐                  ┌───────────────────────┐
+        │  Bạn biết log group   │                  │  Cần tìm kiếm rộng    │
+        │  cụ thể có vấn đề     │                  │  để phát hiện vấn đề  │
+        └───────────┬───────────┘                  └───────────┬───────────┘
+                    │                                          │
+                    ▼                                          ▼
+        ┌───────────────────────┐                  ┌───────────────────────┐
+        │  USE SINGLE-SOURCE    │                  │  USE MULTI-SOURCE     │
+        │  (Advanced Mode)      │                  │  (Correlation Mode)   │
+        │                       │                  │                       │
+        │  ✅ Deep dive         │                  │  ✅ Discovery         │
+        │  ✅ Detailed analysis │                  │  ✅ Attack detection  │
+        │  ✅ Specific issue    │                  │  ✅ Root cause        │
+        └───────────────────────┘                  └───────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    📊 COMPARISON TABLE                                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┬────────────────────────┬────────────────────────────────┐
+│  Criteria            │  Single-Source Mode    │  Multi-Source Correlation      │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🎯 Primary Goal     │  Deep investigation    │  Attack discovery              │
+│                      │  of specific source    │  across infrastructure         │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  📁 Log Sources      │  1 log group           │  2-4 log groups                │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🔍 Search Term      │  REQUIRED              │  OPTIONAL                      │
+│                      │  (specific keyword)    │  (auto-scan for anomalies)     │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  ⏱️ Time Range       │  Narrow (1-2 hours)    │  Wider (1-6 hours)             │
+│                      │  for focused analysis  │  for pattern detection         │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🧠 Analysis Depth   │  DEEP                  │  BROAD                         │
+│                      │  • Every log entry     │  • Cross-source patterns       │
+│                      │  • Detailed metrics    │  • Attack sequences            │
+│                      │  • Temporal patterns   │  • Timeline correlation        │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🎯 Detection Type   │  Pattern-based         │  Sequence + Rule-based         │
+│                      │  • Keyword matching    │  • Timeline analysis           │
+│                      │  • Burst detection     │  • Automated bot detection     │
+│                      │  • Velocity analysis   │  • MITRE ATT&CK mapping        │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🔗 Correlation      │  None                  │  Rich correlation keys         │
+│                      │                        │  • trace_id (STRONG)           │
+│                      │                        │  • request_id (MEDIUM)         │
+│                      │                        │  • IP address (WEAK)           │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  📊 Output           │  • Severity dist.      │  • Correlated events           │
+│                      │  • Component dist.     │  • Attack chains               │
+│                      │  • Error patterns      │  • Cross-source evidence       │
+│                      │  • Attack velocity     │  • Confidence scores           │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  💰 Cost             │  Lower                 │  Higher                        │
+│                      │  (1 log group)         │  (2-4 log groups)              │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  ⚡ Speed            │  Faster                │  Slower                        │
+│                      │  (5-10 seconds)        │  (10-20 seconds)               │
+├──────────────────────┼────────────────────────┼────────────────────────────────┤
+│  🎓 Skill Level      │  Intermediate          │  Beginner-friendly             │
+│                      │  (need to know where   │  (auto-discover issues)        │
+│                      │   to look)             │                                │
+└──────────────────────┴────────────────────────┴────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    ✅ USE MULTI-SOURCE CORRELATION WHEN:                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1️⃣  **DISCOVERY MODE - Không biết vấn đề ở đâu**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Hệ thống có vấn đề nhưng không biết root cause"   │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • User báo: "Website chậm và đôi khi bị lỗi 500"             │
+    │  • Bạn không biết: Network? App? Database?                     │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: VPC Flow + Application + Database                  │
+    │  ✅ Search: "" (empty - auto-scan)                             │
+    │  ✅ Time: Last 6 hours                                         │
+    │  ✅ Result: Discover connection pool exhausted + DB slow query │
+    └────────────────────────────────────────────────────────────────┘
+
+2️⃣  **SECURITY INCIDENT - Phát hiện tấn công phức tạp**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Nghi ngờ có attacker đang thăm dò hệ thống"       │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • CloudWatch alarm: High VPC REJECT count                     │
+    │  • Cần biết: Attacker làm gì sau khi bị block?                │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: VPC Flow + Application + CloudTrail                │
+    │  ✅ Search: "" or "REJECT"                                     │
+    │  ✅ Time: Last 1 hour                                          │
+    │  ✅ Result: Coordinated attack - network scan → SQL injection  │
+    │            → API abuse                                         │
+    └────────────────────────────────────────────────────────────────┘
+
+3️⃣  **ROOT CAUSE ANALYSIS - Tìm nguồn gốc vấn đề**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Tại sao application bị crash?"                     │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Application logs: "Connection timeout"                      │
+    │  • Cần biết: Timeout từ đâu? Network? Database?                │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: Application + Database + VPC Flow                  │
+    │  ✅ Search: "timeout" or "connection"                          │
+    │  ✅ Time: Last 2 hours                                         │
+    │  ✅ Result: Database connection pool full → App timeout        │
+    │            → Network retries                                   │
+    └────────────────────────────────────────────────────────────────┘
+
+4️⃣  **COMPLIANCE AUDIT - Kiểm tra security compliance**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Kiểm tra xem có unauthorized access không?"        │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Security team yêu cầu audit                                 │
+    │  • Cần report: Tất cả failed access attempts                   │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: CloudTrail + Application + VPC Flow                │
+    │  ✅ Search: "denied" or "unauthorized"                         │
+    │  ✅ Time: Last 24 hours                                        │
+    │  ✅ Result: Complete audit trail across all layers             │
+    └────────────────────────────────────────────────────────────────┘
+
+5️⃣  **PERFORMANCE TROUBLESHOOTING - Vấn đề performance phức tạp**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Tại sao API response time tăng đột ngột?"          │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Monitoring: API latency tăng từ 100ms → 5s                 │
+    │  • Cần biết: Bottleneck ở đâu?                                │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: Application + Database + VPC Flow                  │
+    │  ✅ Search: "slow" or "timeout"                                │
+    │  ✅ Time: Last 3 hours                                         │
+    │  ✅ Result: Slow query → Connection pool → Network congestion  │
+    └────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    ✅ USE SINGLE-SOURCE MODE WHEN:                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1️⃣  **KNOWN ISSUE - Biết chính xác log group có vấn đề**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "VPC Flow Logs có nhiều REJECT từ IP lạ"           │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • CloudWatch alarm: VPC REJECT spike                          │
+    │  • Bạn biết: Vấn đề ở network layer                           │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: /aws/vpc/flowlogs                                  │
+    │  ✅ Search: "REJECT"                                           │
+    │  ✅ Time: Last 1 hour                                          │
+    │  ✅ Result: Detailed analysis of all REJECT events             │
+    │            • Source IPs                                        │
+    │            • Target ports                                      │
+    │            • Attack velocity                                   │
+    └────────────────────────────────────────────────────────────────┘
+
+2️⃣  **SPECIFIC ERROR - Điều tra lỗi cụ thể**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Application logs có SQL injection warning"         │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Alert: SQL injection detected in /api/login.php            │
+    │  • Cần biết: Chi tiết về attack này                           │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: /aws/ec2/application                               │
+    │  ✅ Search: "injection" or "UNION SELECT"                      │
+    │  ✅ Time: Last 30 minutes                                      │
+    │  ✅ Result: Deep dive into SQL injection attempts              │
+    │            • All injection payloads                            │
+    │            • Attacker IP                                       │
+    │            • Affected endpoints                                │
+    └────────────────────────────────────────────────────────────────┘
+
+3️⃣  **DATABASE INVESTIGATION - Phân tích database issues**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Database slow query logs tăng cao"                 │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • DBA báo: Slow query count tăng 300%                        │
+    │  • Cần biết: Query nào chậm? Tại sao?                         │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: /aws/rds/mysql/slowquery                           │
+    │  ✅ Search: "Query_time"                                       │
+    │  ✅ Time: Last 2 hours                                         │
+    │  ✅ Result: Detailed slow query analysis                       │
+    │            • Top slow queries                                  │
+    │            • Execution times                                   │
+    │            • Missing indexes                                   │
+    └────────────────────────────────────────────────────────────────┘
+
+4️⃣  **API AUDIT - Kiểm tra specific API calls**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Ai đang gọi DeleteVpc API?"                        │
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Security concern: Suspicious DeleteVpc attempts             │
+    │  • Cần biết: User nào? Từ đâu? Khi nào?                       │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: /aws/cloudtrail/logs                               │
+    │  ✅ Search: "DeleteVpc"                                        │
+    │  ✅ Time: Last 7 days                                          │
+    │  ✅ Result: Complete audit of DeleteVpc calls                  │
+    │            • User ARNs                                         │
+    │            • Source IPs                                        │
+    │            • Success/Denied status                             │
+    └────────────────────────────────────────────────────────────────┘
+
+5️⃣  **FOLLOW-UP INVESTIGATION - Sau khi đã có lead từ Multi-Source**
+    ┌────────────────────────────────────────────────────────────────┐
+    │  Scenario: "Multi-Source phát hiện SQL injection, cần chi tiết"│
+    │                                                                 │
+    │  Example:                                                       │
+    │  • Multi-Source: Detected SQL injection from 203.0.113.42     │
+    │  • Cần biết: Tất cả attempts từ IP này                        │
+    │                                                                 │
+    │  Solution:                                                      │
+    │  ✅ Select: /aws/ec2/application                               │
+    │  ✅ Search: "203.0.113.42"                                     │
+    │  ✅ Time: Last 6 hours                                         │
+    │  ✅ Result: Complete activity log of this IP                   │
+    │            • All requests                                      │
+    │            • Success/Failed attempts                           │
+    │            • Timeline of activity                              │
+    └────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    🎯 RECOMMENDED WORKFLOW                                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+STEP 1: START WITH MULTI-SOURCE (Discovery)
+┌────────────────────────────────────────────────────────────────┐
+│  Goal: Phát hiện vấn đề và xác định nguồn gốc                 │
+│                                                                 │
+│  Settings:                                                      │
+│  • Mode: Multi-Source Correlation                              │
+│  • Sources: VPC Flow + Application + CloudTrail                │
+│  • Search: "" (empty - auto-scan)                              │
+│  • Time: Last 1-6 hours                                        │
+│                                                                 │
+│  Expected Output:                                               │
+│  ✅ Correlated events detected                                 │
+│  ✅ Attack chains identified                                   │
+│  ✅ Confidence scores calculated                               │
+│  ✅ Specific log groups highlighted                            │
+└────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+STEP 2: DRILL DOWN WITH SINGLE-SOURCE (Investigation)
+┌────────────────────────────────────────────────────────────────┐
+│  Goal: Phân tích chi tiết log group cụ thể                     │
+│                                                                 │
+│  Settings:                                                      │
+│  • Mode: Single-Source (Advanced)                              │
+│  • Source: /aws/ec2/application (từ Step 1)                   │
+│  • Search: "203.0.113.42" (IP từ Step 1)                      │
+│  • Time: Same as Step 1                                        │
+│                                                                 │
+│  Expected Output:                                               │
+│  ✅ All logs from this IP                                      │
+│  ✅ Detailed attack patterns                                   │
+│  ✅ Temporal analysis (burst detection)                        │
+│  ✅ Specific payloads/commands                                 │
+└────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+STEP 3: VERIFY WITH ANOTHER SINGLE-SOURCE (Confirmation)
+┌────────────────────────────────────────────────────────────────┐
+│  Goal: Cross-verify findings                                   │
+│                                                                 │
+│  Settings:                                                      │
+│  • Mode: Single-Source (Advanced)                              │
+│  • Source: /aws/vpc/flowlogs                                   │
+│  • Search: "203.0.113.42"                                      │
+│  • Time: Same as Step 1                                        │
+│                                                                 │
+│  Expected Output:                                               │
+│  ✅ Network-level evidence                                     │
+│  ✅ Connection attempts timeline                               │
+│  ✅ Blocked vs Allowed traffic                                 │
+└────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    ⚠️ COMMON MISTAKES TO AVOID                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+❌ MISTAKE 1: Using Single-Source for Unknown Issues
+   Problem: "Hệ thống có vấn đề nhưng dùng Single-Source để tìm"
+   Why Bad: Phải thử từng log group một → mất thời gian
+   Solution: Dùng Multi-Source để discover trước
+
+❌ MISTAKE 2: Using Multi-Source with Too Specific Search Term
+   Problem: Search "sql injection" trong Multi-Source mode
+   Why Bad: Miss các related events (network, API)
+   Solution: Để trống hoặc dùng broad term như "error"
+
+❌ MISTAKE 3: Using Multi-Source for Known Specific Issue
+   Problem: Biết rõ VPC có vấn đề nhưng vẫn dùng Multi-Source
+   Why Bad: Chậm hơn, tốn cost hơn, nhiễu hơn
+   Solution: Dùng Single-Source để deep dive ngay
+
+❌ MISTAKE 4: Too Wide Time Range in Single-Source
+   Problem: Single-Source với time range 24 hours
+   Why Bad: Quá nhiều logs → chậm, khó phân tích
+   Solution: Narrow down time range (1-2 hours)
+
+❌ MISTAKE 5: Not Following Up Multi-Source Results
+   Problem: Chỉ xem Multi-Source results rồi dừng
+   Why Bad: Miss chi tiết quan trọng
+   Solution: Luôn follow up với Single-Source investigation
+
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    💡 PRO TIPS                                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+1️⃣  **Start Broad, Then Narrow**
+    Multi-Source (discover) → Single-Source (investigate) → Single-Source (verify)
+
+2️⃣  **Use Empty Search in Multi-Source**
+    Let the correlation engine auto-discover anomalies
+
+3️⃣  **Use Specific Search in Single-Source**
+    Target exact IP, error message, or keyword
+
+4️⃣  **Match Time Ranges**
+    Use same time range across modes for consistency
+
+5️⃣  **Check Correlation Strength**
+    STRONG (trace_id) > MEDIUM (request_id) > WEAK (IP only)
+
+6️⃣  **Follow Attack Chains**
+    Multi-Source shows attack progression → investigate each step
+
+7️⃣  **Export Results**
+    Save Multi-Source results → use as reference for Single-Source
+
+8️⃣  **Monitor Confidence Scores**
+    High confidence (>80%) = reliable correlation
+    Low confidence (<50%) = need more investigation
+```
+
+---
+
+**Summary:**
+- 🧩 **Multi-Source** = Discovery, Attack Detection, Root Cause (BROAD)
+- 🔍 **Single-Source** = Investigation, Deep Dive, Specific Issue (DEEP)
+- 🎯 **Best Practice** = Start Multi-Source → Drill down Single-Source
+

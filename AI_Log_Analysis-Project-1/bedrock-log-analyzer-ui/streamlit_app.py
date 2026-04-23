@@ -81,8 +81,9 @@ st.sidebar.title("⚙️ Configuration")
 st.sidebar.subheader("Analysis Mode")
 analysis_mode = st.sidebar.radio(
     "Select Mode",
-    ["Single Source", "Multi-Source Correlation"],
-    help="Single Source: Analyze one log group. Multi-Source: Correlate across multiple log groups."
+    ["Multi-Source Correlation", "Single Source (Advanced)"],
+    index=0,  # Default to Multi-Source
+    help="Multi-Source: Main analysis engine - correlate across multiple log groups for comprehensive threat detection. Single Source: Advanced drill-down mode for focused analysis of one specific log group."
 )
 
 # --- Correlation Engine (for Multi-Source mode) ---
@@ -117,24 +118,26 @@ LOG_GROUP_OPTIONS = [
     "/aws/rds/mysql/slowquery",
 ]
 
-if analysis_mode == "Single Source":
+if analysis_mode == "Single Source (Advanced)":
+    # Advanced drill-down mode
     selected_log_group = st.sidebar.selectbox(
-        "Log Group (chọn 1 nguồn)",
+        "Log Group (Advanced Drill-down)",
         options=LOG_GROUP_OPTIONS,
-        help="Chọn đúng 1 log group để AI phân tích tập trung."
+        help="🔬 Advanced mode: Phân tích chi tiết một nguồn log cụ thể. Dùng khi bạn đã biết chính xác nguồn cần điều tra."
     )
     selected_log_groups = [selected_log_group]
+    st.sidebar.info("💡 **Tip:** Dùng Multi-Source mode trước để phát hiện attack patterns, sau đó drill-down vào nguồn cụ thể bằng Single Source mode.")
 else:
-    # Multi-source mode
+    # Multi-source mode (MAIN ENGINE)
     selected_log_groups = st.sidebar.multiselect(
-        "Log Groups (chọn 2-4 nguồn để correlate)",
+        "Log Groups (Main Analysis Engine)",
         options=LOG_GROUP_OPTIONS,
         default=["/aws/vpc/flowlogs", "/aws/ec2/application"],
-        help="Chọn 2-4 log groups để phân tích cross-source patterns. Advanced mode khuyến nghị!"
+        help="🎯 Main engine: Phân tích đa nguồn để phát hiện attack patterns phức tạp. Khuyến nghị: 2-3 sources cho kết quả tốt nhất."
     )
     
     if len(selected_log_groups) < 2:
-        st.sidebar.error("⚠️ Cần chọn ít nhất 2 log groups để correlation!")
+        st.sidebar.error("⚠️ Cần chọn ít nhất 2 log groups cho Multi-Source Correlation!")
     elif len(selected_log_groups) > 4:
         st.sidebar.warning("⚠️ Chọn quá nhiều sources có thể làm chậm phân tích. Khuyến nghị: 2-3 sources.")
 
@@ -155,12 +158,12 @@ else:
 # --- Search Term (optional for multi-source) ---
 st.sidebar.subheader("Search Settings")
 
-if analysis_mode == "Single Source":
+if analysis_mode == "Single Source (Advanced)":
     search_label = "Search Term (bắt buộc)"
-    search_help = f"{search_hint}. Bắt buộc phải nhập cho chế độ Single Source."
+    search_help = f"{search_hint}. Bắt buộc phải nhập cho chế độ Advanced drill-down."
 else:
     search_label = "Search Term (tùy chọn)"
-    search_help = f"{search_hint}. Để trống để quét toàn bộ logs và phát hiện bất thường tự động."
+    search_help = f"{search_hint}. 💡 Để trống để quét toàn bộ logs và phát hiện bất thường tự động (khuyến nghị cho main engine)."
 
 search_term = st.sidebar.text_input(
     search_label,
@@ -212,11 +215,13 @@ bedrock_model = st.sidebar.selectbox(
 # ============================================================
 # MAIN CONTENT
 # ============================================================
-st.title("📊 Log Analysis System")
-if analysis_mode == "Single Source":
-    st.markdown("Single-source AI analysis — one log group per run for focused, reliable results.")
+st.title("📊 AI-Powered Log Analysis System")
+if analysis_mode == "Single Source (Advanced)":
+    st.markdown("🔬 **Advanced Drill-Down Mode** — Deep dive into a specific log source for detailed investigation.")
+    st.info("💡 **Workflow Tip:** Use Multi-Source mode first to discover attack patterns, then switch to Single Source mode to investigate specific sources in detail.")
 else:
-    st.markdown("Multi-source correlation — detect attack patterns across multiple log sources with AI enhancement.")
+    st.markdown("🎯 **Main Analysis Engine** — Multi-source correlation to detect sophisticated attack patterns across your infrastructure.")
+    st.success("✨ **Recommended:** This is the primary analysis mode. It correlates logs from multiple sources to detect complex threats that single-source analysis might miss.")
 
 # ============================================================
 # VALIDATION + ANALYZE
@@ -226,16 +231,16 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
     # --- Input validation ---
     validation_errors = []
 
-    if analysis_mode == "Single Source":
+    if analysis_mode == "Single Source (Advanced)":
         if not selected_log_groups or len(selected_log_groups) == 0:
-            validation_errors.append("⚠️ Vui lòng chọn một Log Group.")
+            validation_errors.append("⚠️ Vui lòng chọn một Log Group cho Advanced drill-down mode.")
         
         if not search_term or not search_term.strip():
-            validation_errors.append("⚠️ Search Term là bắt buộc cho chế độ Single Source.")
+            validation_errors.append("⚠️ Search Term là bắt buộc cho chế độ Single Source (Advanced).")
     else:
-        # Multi-source mode
+        # Multi-source mode (MAIN ENGINE)
         if len(selected_log_groups) < 2:
-            validation_errors.append("⚠️ Cần chọn ít nhất 2 log groups cho chế độ Multi-Source Correlation.")
+            validation_errors.append("⚠️ Main engine cần ít nhất 2 log groups để correlation. Chọn thêm sources hoặc chuyển sang Single Source mode.")
         elif len(selected_log_groups) > 4:
             validation_errors.append("⚠️ Chọn tối đa 4 log groups để tránh phân tích quá chậm.")
 
@@ -253,13 +258,13 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
             try:
                 cw_client = CloudWatchClient(region=aws_region, profile=aws_profile)
                 
-                if analysis_mode == "Single Source":
+                if analysis_mode == "Single Source (Advanced)":
                     # ============================================================
-                    # SINGLE SOURCE MODE (original logic)
+                    # SINGLE SOURCE MODE (ADVANCED DRILL-DOWN)
                     # ============================================================
                     selected_log_group = selected_log_groups[0]
                     
-                    st.info(f"📥 Pulling logs from **{selected_log_group}**...")
+                    st.info(f"🔬 **Advanced Drill-Down:** Pulling logs from **{selected_log_group}**...")
                     raw_logs = cw_client.get_logs(
                         log_group=selected_log_group,
                         start_time=start_dt,
@@ -365,9 +370,9 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                 
                 else:
                     # ============================================================
-                    # MULTI-SOURCE CORRELATION MODE
+                    # MULTI-SOURCE CORRELATION MODE (MAIN ENGINE)
                     # ============================================================
-                    st.info(f"📥 Pulling logs from {len(selected_log_groups)} sources...")
+                    st.info(f"🎯 **Main Engine:** Pulling logs from {len(selected_log_groups)} sources for correlation analysis...")
                     
                     # Determine if we have a search term or scanning all logs
                     has_search_term = search_term and search_term.strip()
@@ -440,6 +445,24 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                                 for i, event in enumerate(correlated_events[:5], 1):
                                     st.write(f"  {i}. {event.attack_name} (Confidence: {event.confidence_score:.1f}%, Sources: {len(event.sources)})")
                             
+                            # Build correlation metadata for AI (Priority 1 enhancement)
+                            correlation_metadata = {
+                                'correlated_events': correlated_events,
+                                'correlation_keys_used': ['trace_id', 'request_id', 'session_id', 'instance_id', 'ip'],
+                                'timeline_sequences': [
+                                    {
+                                        'attack_name': e.attack_name,
+                                        'first_event': e.timeline[0]['timestamp'] if e.timeline else None,
+                                        'last_event': e.timeline[-1]['timestamp'] if e.timeline else None,
+                                        'event_count': len(e.timeline),
+                                        'sources': e.sources
+                                    }
+                                    for e in correlated_events
+                                ],
+                                'matched_rules': [e.matched_rules for e in correlated_events if e.matched_rules],
+                                'confidence_scores': [e.confidence_score for e in correlated_events]
+                            }
+                            
                             # Convert to solutions format for AI enhancement
                             from models import Solution, IssueType
                             solutions = []
@@ -488,17 +511,19 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         if enable_ai and solutions:
                             st.info("🤖 Enhancing correlated events with AI...")
                             
-                            # Build multi-source AI context
+                            # Build multi-source AI context with correlation metadata
                             preprocessor = LogPreprocessor()
                             analyzer = PatternAnalyzer()
                             analysis = analyzer.analyze_log_entries(all_parsed_entries)
                             
+                            # Pass correlation_metadata to AI context (Priority 1 enhancement)
                             ai_context = preprocessor.prepare_ai_context(
                                 entries=all_parsed_entries,
                                 analysis=analysis,
                                 log_group_name=f"Multi-Source ({len(selected_log_groups)} sources)",
                                 search_term=effective_search or "Auto-scan (no search term)",
-                                time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}"
+                                time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}",
+                                correlation_metadata=correlation_metadata if st.session_state.correlation_mode == 'advanced' else None
                             )
                             
                             enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
@@ -598,12 +623,12 @@ else:
         
         st.divider()
         
-        # Multi-source specific summary
+        # Multi-source specific summary (MAIN ENGINE)
         if analysis_mode == "Multi-Source Correlation":
-            st.subheader("🔗 Multi-Source Summary")
+            st.subheader("🎯 Main Engine Analysis Summary")
             st.info(f"**Sources Analyzed:** {result.metadata.log_directory}")
             st.info(f"**Search Term:** {result.metadata.search_term}")
-            st.info(f"**Correlation Mode:** {st.session_state.correlation_mode.upper()}")
+            st.info(f"**Correlation Engine:** {st.session_state.correlation_mode.upper()}")
             
             if st.session_state.correlation_mode == 'advanced' and st.session_state.advanced_correlated_events:
                 st.metric("Correlated Attack Patterns", len(st.session_state.advanced_correlated_events))

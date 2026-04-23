@@ -41,6 +41,12 @@ class AIContext:
     
     # NEW: Temporal analysis metrics
     temporal_analysis: Dict = field(default_factory=dict)          # attack velocity, burst detection
+    
+    # NEW: Multi-source correlation metadata (Priority 1 enhancement)
+    correlation_metadata: Optional[Dict] = None                    # correlation context from correlator
+    correlated_events_summary: Optional[str] = None                # human-readable summary
+    correlation_keys_used: Optional[List[str]] = None              # which keys were used (trace_id, etc)
+    is_multi_source: bool = False                                  # single vs multi-source analysis
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +325,8 @@ class LogPreprocessor:
         analysis: AnalysisData,
         log_group_name: str,
         search_term: str = "",
-        time_range_str: str = ""
+        time_range_str: str = "",
+        correlation_metadata: Optional[Dict] = None  # NEW: correlation context
     ) -> AIContext:
         """
         Build structured AIContext from parsed entries and pattern analysis.
@@ -328,6 +335,7 @@ class LogPreprocessor:
             entries: list of parsed LogEntry objects from one log group
             analysis: AnalysisData from PatternAnalyzer
             log_group_name: the CloudWatch log group being analyzed
+            correlation_metadata: (Optional) correlation context from AdvancedCorrelator
 
         Returns:
             AIContext ready to be consumed by BedrockEnhancer
@@ -378,7 +386,8 @@ class LogPreprocessor:
         # --- Temporal analysis (NEW) ---
         temporal_analysis = analysis.time_pattern or {}
 
-        return AIContext(
+        # --- Build base context ---
+        context = AIContext(
             source_type=source_type,
             log_group_name=log_group_name,
             total_logs_pulled=len(entries),
@@ -394,6 +403,36 @@ class LogPreprocessor:
             within_source_hints=hints,
             temporal_analysis=temporal_analysis,
         )
+
+        # --- Add correlation metadata if available (Priority 1 enhancement) ---
+        if correlation_metadata:
+            context.is_multi_source = True
+            context.correlation_metadata = correlation_metadata
+            context.correlation_keys_used = correlation_metadata.get('correlation_keys_used', [])
+            
+            # Build human-readable summary of correlated events
+            correlated_events = correlation_metadata.get('correlated_events', [])
+            if correlated_events:
+                summary_lines = [
+                    f"🔗 MULTI-SOURCE CORRELATION DETECTED ({len(correlated_events)} attack patterns):",
+                    ""
+                ]
+                for i, event in enumerate(correlated_events[:5], 1):
+                    summary_lines.append(
+                        f"{i}. {event.attack_name} "
+                        f"(Confidence: {event.confidence_score:.1f}%, "
+                        f"Sources: {len(event.sources)}, "
+                        f"Events: {len(event.timeline)})"
+                    )
+                    summary_lines.append(f"   Correlation keys: {', '.join(k for k, v in event.correlation_keys.items() if v)}")
+                    summary_lines.append(f"   Timeline: {event.timeline[0]['timestamp']} → {event.timeline[-1]['timestamp']}")
+                    if event.matched_rules:
+                        summary_lines.append(f"   Matched rules: {', '.join(event.matched_rules[:3])}")
+                    summary_lines.append("")
+                
+                context.correlated_events_summary = "\n".join(summary_lines)
+
+        return context
 
     # ---- internal helpers ----
 

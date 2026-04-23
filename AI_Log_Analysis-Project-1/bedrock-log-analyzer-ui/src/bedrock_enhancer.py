@@ -259,6 +259,25 @@ class BedrockEnhancer:
                 prompt += f"  • {hint}\n"
             prompt += "\n"
         
+        # NEW: Multi-source correlation context (Priority 1 enhancement)
+        if ctx.is_multi_source and ctx.correlated_events_summary:
+            prompt += "# 🔗 MULTI-SOURCE CORRELATION CONTEXT (CRITICAL)\n\n"
+            prompt += "⚠️ IMPORTANT: These events are ALREADY CORRELATED across multiple log sources.\n"
+            prompt += "DO NOT re-discover correlations. The correlator has already:\n"
+            prompt += f"  • Linked events using: {', '.join(ctx.correlation_keys_used or ['trace_id', 'request_id', 'session_id', 'IP'])}\n"
+            prompt += "  • Detected timeline sequences with delay calculations\n"
+            prompt += "  • Matched against detection rules\n"
+            prompt += "  • Calculated multi-factor confidence scores\n\n"
+            prompt += ctx.correlated_events_summary
+            prompt += "\n"
+            prompt += "YOUR FOCUS SHOULD BE:\n"
+            prompt += "  1. ROOT CAUSE ANALYSIS - Why did this attack succeed?\n"
+            prompt += "  2. BUSINESS IMPACT - What's at risk?\n"
+            prompt += "  3. ACTIONABLE REMEDIATION - Specific steps with AWS CLI commands\n"
+            prompt += "  4. PREVENTION - How to stop this from happening again\n\n"
+            prompt += "DO NOT waste effort re-discovering what the correlator already found.\n"
+            prompt += "Leverage the correlation context to provide DEEPER insights.\n\n"
+        
         # Representative samples with context
         if ctx.representative_samples:
             prompt += "# REPRESENTATIVE LOG SAMPLES (Highest Relevance)\n"

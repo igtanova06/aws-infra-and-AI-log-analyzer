@@ -8,15 +8,35 @@ Built with **Streamlit** for an interactive, real-time analysis dashboard.
 
 ## ✨ Features
 
-- **Multi-Source Log Ingestion** — Concurrently pull logs from multiple CloudWatch Log Groups (VPC Flow Logs, CloudTrail, Application Logs) to prevent throttling
-- **Multi-Format Log Parsing** — Automatically detect and parse VPC Flow Logs, CloudTrail JSON events, modern JSON app logs, and classic application logs
-- **Temporal Analysis** ⭐ NEW — Detect burst attacks and time-based patterns (events/minute, peak activity, attack duration)
-- **Context-Aware Rule Detection** ⭐ NEW — Avoid false positives with positive/negative keyword matching and severity scoring (CRITICAL/HIGH/MEDIUM/LOW)
-- **Rule-Based Issue Detection** — Detect connection, permission, resource, database, and security issues using keyword-based rules
-- **AI-Enhanced Solutions (Structured JSON)** — Leverage AWS Bedrock (Claude 3.5) with advanced context building to strictly separate Evidence vs Inference, and provide highly specific, data-driven remediation commands
-- **Interactive Dashboard** — Powerful multi-tier UI rendering Summary (Severity/Impact), Investigation Details (Evidence trace), and Full Action Plans with one-click exporting
-- **Severity & Component Charts** — Visualize error distribution across severity levels and components
-- **Export Results** — Download analysis results as JSON or CSV
+### **🎯 Main Analysis Engine (Multi-Source Correlation)**
+- **Advanced Correlation** ⭐ — Correlate logs across multiple sources using trace_id, request_id, session_id, instance_id, and IP
+- **Timeline Sequence Detection** — Build attack timelines with delay calculations between events
+- **Rule Engine** — Match against detection rules (SSH Brute Force, SQL Injection, Port Scan, etc.)
+- **Confidence Scoring** — Multi-factor confidence calculation (severity, sequence logic, anomaly level, correlation strength)
+- **AI Context Enhancement** — AI receives full correlation metadata (no "guessing"), focuses on root cause and remediation
+
+### **🔬 Advanced Drill-Down (Single Source)**
+- **Deep Dive Analysis** — Detailed investigation of specific log sources
+- **Temporal Analysis** — Detect burst attacks and time-based patterns (events/minute, peak activity, attack duration)
+- **Context-Aware Rule Detection** — Avoid false positives with positive/negative keyword matching and severity scoring
+
+### **🤖 AI-Powered Analysis**
+- **Structured JSON Output** — Strict separation of Evidence vs Inference
+- **MITRE ATT&CK Classification** — Map attacks to MITRE framework
+- **Actionable Remediation** — Specific AWS CLI commands (not placeholders)
+- **Prevention Strategies** — AWS services, configuration changes, monitoring improvements
+- **Cost Optimization** — Token reduction (30-50% savings) through intelligent context building
+
+### **📊 Interactive Dashboard**
+- **Multi-Tier UI** — Summary (Severity/Impact) → Investigation (Evidence) → Action Plan (Remediation)
+- **Correlation Visualization** — View correlated events, timelines, and matched rules
+- **Charts & Metrics** — Severity distribution, component distribution, attack metrics
+- **Export Results** — Download as JSON or CSV
+
+### **🔧 Technical Features**
+- **Multi-Format Log Parsing** — VPC Flow Logs, CloudTrail JSON, modern JSON app logs, classic logs
+- **Concurrent Log Ingestion** — Pull from multiple CloudWatch Log Groups without throttling
+- **Cross-Region Bedrock Support** — Use APAC/US inference profiles to avoid capacity limits
 - **Docker Support** — Containerized deployment with health checks
 
 ---
@@ -111,15 +131,67 @@ Open **http://localhost:8501** in your browser.
 
 ---
 
+## 🎯 Recommended Workflow
+
+### **Step 1: Discovery (Multi-Source - Main Engine)** 🔍
+
+```
+1. Open app → Default mode: Multi-Source Correlation ✅
+2. Select 2-3 log sources:
+   ✓ /aws/vpc/flowlogs
+   ✓ /aws/ec2/application
+   ✓ /aws/cloudtrail/logs (optional)
+3. Leave Search Term empty (auto-scan for anomalies)
+4. Time Range: Last 1 hour
+5. Correlation Engine: Advanced (Trace ID + Timeline)
+6. Click "🚀 Analyze Logs"
+
+Expected Results:
+  ✅ Correlated attack patterns detected:
+     • SSH Brute Force (Confidence: 95.2%)
+     • SQL Injection (Confidence: 87.5%)
+     • Port Scanning (Confidence: 72.3%)
+```
+
+### **Step 2: Investigation (Single Source - Advanced)** 🔬
+
+```
+1. From Step 1 results, identify specific source to investigate
+2. Switch to "Single Source (Advanced)" mode
+3. Select log group: /aws/vpc/flowlogs
+4. Search Term: "REJECT" or specific IP "203.0.113.42"
+5. Time Range: Keep same or narrow down
+6. Click "🚀 Analyze Logs"
+
+Expected Results:
+  ✅ Deep dive into VPC logs:
+     • 53 REJECT events from IP 203.0.113.42
+     • Target port: 22 (SSH)
+     • Detailed timeline per packet
+     • Source/Dest IPs, Ports, Protocols
+```
+
+---
+
 ## ⚙️ Configuration (Sidebar)
+
+### **Analysis Mode** 🎯
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Multi-Source Correlation** (Default) | Main analysis engine - correlate logs from 2-4 sources | **Recommended:** Discover sophisticated attack patterns across infrastructure |
+| **Single Source (Advanced)** | Deep dive into one specific log group | Advanced investigation after discovering threats |
+
+### **Settings**
 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | **AWS Region** | AWS region for CloudWatch & Bedrock | `ap-southeast-1` |
 | **AWS Profile** | AWS CLI profile name | `default` |
-| **Log Source** | CloudWatch Log Group to focus analysis on (One per run) | `/aws/vpc/flowlogs` |
-| **Search Term** | Keyword filter for log messages (Required) | `error` |
+| **Log Sources** | CloudWatch Log Groups (2-4 for Multi-Source, 1 for Single Source) | VPC + App logs |
+| **Search Term** | Keyword filter (Optional for Multi-Source, Required for Single Source) | Auto-scan |
 | **Time Range** | Specific Start Date/Time and End Date/Time | `Last 1 Hour` |
+| **Correlation Engine** | Basic (IP-based) or Advanced (Trace ID + Timeline + Rules) | `Advanced` |
 | **Enable AI** | Toggle Bedrock AI enhancement | `true` |
 | **Bedrock Model** | AI model selection (Cross-Region supported) | Claude 3 Haiku |
 

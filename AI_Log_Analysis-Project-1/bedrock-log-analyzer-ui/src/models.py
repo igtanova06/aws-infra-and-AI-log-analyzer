@@ -120,3 +120,103 @@ class AnalysisResult:
     def to_json(self):
         """Convert to JSON string"""
         return json.dumps(self.to_dict(), indent=2)
+
+
+# ============================================================
+# Event Abstraction Layer — signals, not raw logs
+# ============================================================
+
+@dataclass
+class EventSignal:
+    """
+    Abstracted security event — compact, token-efficient.
+    Replaces raw log lines in AI context to stay within token limits.
+    """
+    event_type: str              # "port_scan_burst", "sql_injection", "api_deny"
+    source: str                  # "/aws/vpc/flowlogs"
+    severity: str                # "CRITICAL", "HIGH", "MEDIUM", "LOW"
+    count: int                   # number of raw events this represents
+    time_window: str             # "12:46:33 → 12:47:30 (57s)"
+    actors: List[str] = field(default_factory=list)  # IPs, users, ARNs
+    targets: List[str] = field(default_factory=list)  # destination IPs, resources
+    indicators: Dict = field(default_factory=dict)    # ports, paths, queries
+    anomaly_score: float = 0.0   # 0.0 - 1.0 (how abnormal vs baseline)
+    description: str = ""        # human-readable summary
+
+
+@dataclass
+class GlobalRCA:
+    """
+    Result from Global Root Cause Analysis.
+    AI sees the FULL picture once and produces this comprehensive report.
+    """
+    # Incident Story (TL;DR)
+    incident_story: List[str] = field(default_factory=list)  # ordered timeline sentences
+    
+    # Threat Assessment with confidence
+    threat_assessment: Dict = field(default_factory=dict)
+    # Example: {
+    #   "severity": "Critical",
+    #   "confidence": 0.87,
+    #   "reasoning": "3 sources corroborate, IP matches across VPC+App+CloudTrail",
+    #   "scope": "VPC, Application, IAM"
+    # }
+    
+    # AI-generated narrative
+    attack_narrative: str = ""
+    
+    # Affected components with impact
+    affected_components: List[Dict] = field(default_factory=list)
+    # [{component, impact_level, evidence}]
+    
+    # Root cause
+    root_cause: str = ""
+    
+    # MITRE mapping
+    mitre_mapping: Dict = field(default_factory=dict)
+    
+    # Immediate actions (AWS CLI commands)
+    immediate_actions: List[Dict] = field(default_factory=list)
+    # [{action, command, priority}]
+    
+    # Remediation plan
+    remediation_plan: Dict = field(default_factory=dict)
+    # {short_term: [...], medium_term: [...], long_term: [...]}
+    
+    # Raw AI response for debugging
+    raw_ai_response: Dict = field(default_factory=dict)
+    
+    # Cost tracking
+    tokens_used: int = 0
+    cost: float = 0.0
+
+
+@dataclass
+class DeepDiveResult:
+    """
+    Result from Deep Dive into a single log group.
+    Enriched with Global RCA context so AI explains rather than guesses.
+    """
+    log_group: str
+    
+    # Component-level analysis
+    component_summary: str = ""
+    specific_findings: List[Dict] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+    
+    # Metrics that ground the AI analysis
+    component_metrics: Dict = field(default_factory=dict)
+    # {error_rate, anomaly_score, severity_distribution}
+    
+    anomalies: List[Dict] = field(default_factory=list)
+    # [{pattern, count, baseline, anomaly_score}]
+    
+    # Reference back to global context
+    global_rca_reference: str = ""
+    
+    # Raw AI response
+    raw_ai_response: Dict = field(default_factory=dict)
+    
+    # Cost tracking
+    tokens_used: int = 0
+    cost: float = 0.0

@@ -640,3 +640,284 @@ class LogPreprocessor:
                 )
 
         return hints
+
+
+# ============================================================
+# Event Abstraction Layer — signals, not raw logs
+# ============================================================
+
+def extract_event_signals(
+    entries: List[LogEntry],
+    analysis: AnalysisData,
+    correlated_events: list = None,
+    per_source_entries: Dict[str, List[LogEntry]] = None,
+) -> list:
+    """
+    Convert raw patterns + correlation into compact EventSignal objects.
+    AI receives signals (structured, small) instead of raw logs (bloated, noisy).
+    
+    Returns list of dicts (serializable EventSignals).
+    """
+    from models import EventSignal
+    signals = []
+    
+    # --- 1. Signals from error patterns (PatternAnalyzer output) ---
+    for pattern in analysis.error_patterns[:15]:  # cap at 15 patterns
+        # Detect event type from pattern text
+        p_lower = pattern.pattern.lower()
+        event_type = "error"
+        severity = "MEDIUM"
+        anomaly_score = min(pattern.count / 50.0, 1.0)  # normalize
+        
+        if any(kw in p_lower for kw in ['reject', 'denied', 'refused']):
+            event_type = "network_reject"
+            severity = "HIGH"
+        elif any(kw in p_lower for kw in ['injection', 'union select', 'xss', 'traversal']):
+            event_type = "attack_attempt"
+            severity = "CRITICAL"
+            anomaly_score = max(anomaly_score, 0.9)
+        elif any(kw in p_lower for kw in ['timeout', 'unreachable', 'connection reset']):
+            event_type = "connection_failure"
+            severity = "HIGH"
+        elif any(kw in p_lower for kw in ['accessdenied', 'unauthorized', 'forbidden']):
+            event_type = "access_denied"
+            severity = "HIGH"
+        elif any(kw in p_lower for kw in ['slow query', 'query_time']):
+            event_type = "slow_query"
+            severity = "MEDIUM"
+        elif any(kw in p_lower for kw in ['aborted connection', 'too many connection']):
+            event_type = "database_stress"
+            severity = "HIGH"
+        
+        # Extract IPs from pattern
+        actors = list(set(_IP_PATTERN.findall(pattern.pattern)))
+        
+        signals.append({
+            'event_type': event_type,
+            'source': pattern.component,
+            'severity': severity,
+            'count': pattern.count,
+            'description': pattern.pattern[:150],
+            'actors': actors[:3],
+            'anomaly_score': round(anomaly_score, 2),
+        })
+    
+    # --- 2. Signals from correlated attacks (AdvancedCorrelator output) ---
+    if correlated_events:
+        for event in correlated_events:
+            # Build time window string
+            if event.timeline:
+                ts_start = event.timeline[0].timestamp
+                ts_end = event.timeline[-1].timestamp
+                ts_fmt = lambda t: t.strftime('%H:%M:%S') if hasattr(t, 'strftime') else str(t)
+                duration = (ts_end - ts_start).total_seconds() if hasattr(ts_end, '__sub__') else 0
+                time_window = f"{ts_fmt(ts_start)} -> {ts_fmt(ts_end)} ({duration:.0f}s)"
+            else:
+                time_window = "unknown"
+            
+            # Extract actors from timeline
+            actors = list(set(t.actor for t in event.timeline if t.actor))[:5]
+            
+            signals.append({
+                'event_type': f"correlated_attack:{event.attack_name}",
+                'source': ', '.join(event.sources),
+                'severity': event.severity,
+                'count': len(event.timeline),
+                'time_window': time_window,
+                'actors': actors,
+                'targets': [],
+                'indicators': {
+                    'matched_rules': event.matched_rules or [],
+                    'correlation_keys': {k: v for k, v in event.correlation_keys.items() if v},
+                },
+                'anomaly_score': round(event.confidence_score / 100.0, 2),
+                'description': event.ai_recommendation[:200] if event.ai_recommendation else event.attack_name,
+            })
+    
+    # --- 3. Per-source anomaly signals ---
+    if per_source_entries:
+        for source, source_entries in per_source_entries.items():
+            source_type = detect_source_type(source)
+            
+            # Count severities
+            sev_dist = Counter(
+                (e.severity or 'UNKNOWN').upper() for e in source_entries
+            )
+            error_count = sev_dist.get('ERROR', 0) + sev_dist.get('CRITICAL', 0)
+            total = len(source_entries)
+            error_rate = error_count / total if total > 0 else 0
+            
+            if error_rate > 0.3:  # More than 30% errors = anomaly
+                signals.append({
+                    'event_type': 'high_error_rate',
+                    'source': source,
+                    'severity': 'HIGH' if error_rate > 0.5 else 'MEDIUM',
+                    'count': error_count,
+                    'description': f"Error rate {error_rate:.0%} ({error_count}/{total} entries)",
+                    'anomaly_score': round(min(error_rate * 1.5, 1.0), 2),
+                })
+    
+    return signals
+
+
+def build_unified_context(
+    per_source_entries: Dict[str, List[LogEntry]],
+    analysis: AnalysisData,
+    correlated_events: list = None,
+    time_range_str: str = "",
+) -> dict:
+    """
+    Build ONE compact, unified context for Global RCA.
+    Contains signals (not raw logs), per-source summaries, and correlation results.
+    
+    Returns a dict that can be serialized into the AI prompt.
+    """
+    # --- Per-source summaries ---
+    source_summaries = {}
+    all_entries = []
+    for source, entries in per_source_entries.items():
+        all_entries.extend(entries)
+        sev_dist = Counter((e.severity or 'UNKNOWN').upper() for e in entries)
+        error_count = sev_dist.get('ERROR', 0) + sev_dist.get('CRITICAL', 0)
+        total = len(entries)
+        
+        # Extract top IPs for this source
+        ip_counts = _extract_ips(entries)
+        top_ips = [{'ip': ip, 'count': c} for ip, c in ip_counts.most_common(3)]
+        
+        source_summaries[source] = {
+            'total_entries': total,
+            'error_count': error_count,
+            'error_rate': f"{(error_count / total * 100):.1f}%" if total > 0 else "0%",
+            'severity_distribution': dict(sev_dist),
+            'top_ips': top_ips,
+        }
+    
+    # --- Extract event signals ---
+    signals = extract_event_signals(
+        entries=all_entries,
+        analysis=analysis,
+        correlated_events=correlated_events,
+        per_source_entries=per_source_entries,
+    )
+    
+    # --- Build incident timeline from correlated events ---
+    incident_timeline = []
+    if correlated_events:
+        for event in correlated_events:
+            for t_event in event.timeline:
+                ts_str = t_event.timestamp.strftime('%H:%M:%S') if hasattr(t_event.timestamp, 'strftime') else str(t_event.timestamp)
+                incident_timeline.append({
+                    'time': ts_str,
+                    'source': t_event.source,
+                    'event': t_event.event_type,
+                    'actor': t_event.actor,
+                    'message': (t_event.message or '')[:100],
+                })
+        incident_timeline.sort(key=lambda x: x['time'])
+    
+    # --- Top suspicious IPs (global) ---
+    global_ip_counts = _extract_ips(all_entries)
+    suspicious_ips = [
+        {'ip': ip, 'count': c, 'is_external': not (ip.startswith('10.') or ip.startswith('192.168.') or ip.startswith('172.'))}
+        for ip, c in global_ip_counts.most_common(5)
+        if c >= 2
+    ]
+    
+    # --- Select a few critical raw samples (max 5, only highest severity) ---
+    critical_samples = []
+    for e in all_entries:
+        if (e.severity or '').upper() in ('CRITICAL', 'ERROR', 'FATAL'):
+            text = (e.content or '').strip()
+            if text and len(critical_samples) < 5:
+                truncated = text[:250] + '...' if len(text) > 250 else text
+                critical_samples.append(f"[{e.component}] {truncated}")
+    
+    return {
+        'source_count': len(per_source_entries),
+        'total_logs': len(all_entries),
+        'time_range': time_range_str,
+        'source_summaries': source_summaries,
+        'signals': signals,
+        'incident_timeline': incident_timeline[:20],  # cap at 20 events
+        'suspicious_ips': suspicious_ips,
+        'critical_samples': critical_samples,
+        'correlation_count': len(correlated_events) if correlated_events else 0,
+    }
+
+
+def build_deep_dive_context(
+    log_group: str,
+    entries: List[LogEntry],
+    analysis: AnalysisData,
+    global_rca_summary: str = "",
+) -> dict:
+    """
+    Build enriched context for Deep Dive into a single log group.
+    Includes metrics + anomalies + raw samples + global RCA reference.
+    AI explains (based on known context), not guesses.
+    """
+    source_type = detect_source_type(log_group)
+    
+    # --- Component metrics ---
+    sev_dist = Counter((e.severity or 'UNKNOWN').upper() for e in entries)
+    error_count = sev_dist.get('ERROR', 0) + sev_dist.get('CRITICAL', 0)
+    total = len(entries)
+    
+    # --- Anomalies (patterns with unusual counts) ---
+    anomalies = []
+    for pattern in analysis.error_patterns[:10]:
+        if pattern.component == log_group or not pattern.component:
+            p_lower = pattern.pattern.lower()
+            is_security = any(kw in p_lower for kw in [
+                'inject', 'denied', 'reject', 'brute', 'attack',
+                'unauthorized', 'exploit', 'traversal'
+            ])
+            anomalies.append({
+                'pattern': pattern.pattern[:120],
+                'count': pattern.count,
+                'is_security_relevant': is_security,
+                'anomaly_score': round(min(pattern.count / 20.0, 1.0), 2),
+            })
+    
+    # --- Top raw samples (most relevant, max 8) ---
+    scored = []
+    for e in entries:
+        entry_source = detect_source_type(e.component or log_group)
+        s = score_entry(e, entry_source)
+        scored.append((s, e))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    
+    raw_samples = []
+    seen = set()
+    for score, e in scored:
+        text = (e.content or '').strip()
+        if not text:
+            continue
+        fingerprint = re.sub(r'\d+', '<N>', text[:80])
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        truncated = text[:300] + '...' if len(text) > 300 else text
+        raw_samples.append(truncated)
+        if len(raw_samples) >= 8:
+            break
+    
+    # --- Extract IPs ---
+    ip_counts = _extract_ips(entries)
+    top_ips = [{'ip': ip, 'count': c} for ip, c in ip_counts.most_common(5)]
+    
+    return {
+        'log_group': log_group,
+        'source_type': source_type,
+        'global_rca_summary': global_rca_summary,
+        'component_metrics': {
+            'total_entries': total,
+            'error_count': error_count,
+            'error_rate': f"{(error_count / total * 100):.1f}%" if total > 0 else "0%",
+            'severity_distribution': dict(sev_dist),
+        },
+        'anomalies': anomalies,
+        'top_ips': top_ips,
+        'raw_samples': raw_samples,
+    }

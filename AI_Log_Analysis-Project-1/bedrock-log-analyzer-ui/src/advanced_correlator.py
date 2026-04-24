@@ -301,6 +301,11 @@ class RuleEngine:
         """Evaluate single rule against timeline"""
         # Check if required sources are present
         sources_present = set(event.source for event in timeline)
+        
+        # DEBUG
+        if rule.rule_id == 'R001':
+            print(f"R001 checks timeline length {len(timeline)}. Sources present: {sources_present}")
+            
         if not all(src in sources_present for src in rule.required_sources):
             return 0.0
         
@@ -328,17 +333,24 @@ class RuleEngine:
         
         # Find first event of sequence
         seq_idx = 0
+        seen_events = []
         for i, event in enumerate(timeline):
+            seen_events.append(event.event_type)
             if event.event_type == expected_sequence[seq_idx]:
                 seq_idx += 1
                 if seq_idx >= len(expected_sequence):
+                    print(f"Matched sequence {expected_sequence}!")
                     return True
                 
                 # Check time gap to next event
                 if i + 1 < len(timeline):
                     time_gap = (timeline[i + 1].timestamp - event.timestamp).total_seconds()
                     if time_gap > max_gap:
+                        print(f"Gap too large: {time_gap} > {max_gap}")
                         seq_idx = 0  # Reset if gap too large
+        
+        if expected_sequence == ['network_reject', 'sql_injection']:
+            print(f"Timeline seen events: {set(seen_events)}")
         
         return seq_idx >= len(expected_sequence)
     
@@ -432,28 +444,8 @@ class AdvancedCorrelator:
         # If patterns provided, filter log entries to significant ones
         filtered_entries = log_entries
         
-        if clustered_patterns:
-            # Filter to only include entries matching significant patterns (count >= 5)
-            significant_patterns = [p for p in clustered_patterns if p.count >= 2]
-            
-            if significant_patterns:
-                # Create pattern signatures for fast lookup
-                pattern_signatures = set()
-                for pattern in significant_patterns:
-                    signature = self._extract_pattern_signature(pattern.pattern)
-                    pattern_signatures.add(signature)
-                
-                # Filter log entries
-                filtered = []
-                for entry in log_entries:
-                    entry_text = entry.message or entry.content or ""
-                    entry_signature = self._extract_pattern_signature(entry_text)
-                    if entry_signature in pattern_signatures:
-                        filtered.append(entry)
-                
-                if filtered:
-                    filtered_entries = filtered
-                    print(f"Pattern filtering: {len(filtered_entries)}/{len(log_entries)} entries match significant patterns")
+        # Use all entries for correlation to catch low-frequency targeted attacks
+        filtered_entries = log_entries
         
         # Group entries by source for correlation
         entries_by_source = {}
@@ -567,50 +559,35 @@ class AdvancedCorrelator:
             for entry in entries:
                 text = (entry.content or '') + ' ' + (entry.message or '')
                 
-                # Determine primary correlation key (priority order)
-                correlation_key = None
-                correlation_strength = "WEAK"
+                # Determine ALL correlation keys this event belongs to
+                matched_keys = []
                 
                 # Check trace_id (STRONGEST)
                 for trace_id in all_trace_ids:
                     if trace_id in text:
-                        correlation_key = f"trace:{trace_id}"
-                        correlation_strength = "STRONG"
-                        break
+                        matched_keys.append((f"trace:{trace_id}", "STRONG"))
                 
                 # Check request_id
-                if not correlation_key:
-                    for request_id in all_request_ids:
-                        if request_id in text:
-                            correlation_key = f"request:{request_id}"
-                            correlation_strength = "MEDIUM"
-                            break
+                for request_id in all_request_ids:
+                    if request_id in text:
+                        matched_keys.append((f"request:{request_id}", "MEDIUM"))
                 
                 # Check session_id
-                if not correlation_key:
-                    for session_id in all_session_ids:
-                        if session_id in text:
-                            correlation_key = f"session:{session_id}"
-                            correlation_strength = "MEDIUM"
-                            break
+                for session_id in all_session_ids:
+                    if session_id in text:
+                        matched_keys.append((f"session:{session_id}", "MEDIUM"))
                 
                 # Check instance_id
-                if not correlation_key:
-                    for instance_id in all_instance_ids:
-                        if instance_id in text:
-                            correlation_key = f"instance:{instance_id}"
-                            correlation_strength = "MEDIUM"
-                            break
+                for instance_id in all_instance_ids:
+                    if instance_id in text:
+                        matched_keys.append((f"instance:{instance_id}", "MEDIUM"))
                 
-                # Fallback to IP (WEAKEST)
-                if not correlation_key:
-                    for ip in all_ips:
-                        if ip in text:
-                            correlation_key = f"ip:{ip}"
-                            correlation_strength = "WEAK"
-                            break
+                # Check IP (WEAKEST)
+                for ip in all_ips:
+                    if ip in text:
+                        matched_keys.append((f"ip:{ip}", "WEAK"))
                 
-                if not correlation_key:
+                if not matched_keys:
                     continue
                 
                 # Create timeline event
@@ -618,22 +595,24 @@ class AdvancedCorrelator:
                 if not ts:
                     continue
                 
-                event = TimelineEvent(
-                    timestamp=ts,
-                    source=source_type,
-                    event_type=self._classify_event_type(entry, source_type),
-                    severity=entry.severity or "UNKNOWN",
-                    actor=correlation_key.split(':')[1],
-                    message=entry.message or entry.content[:200],
-                    metadata={
-                        'correlation_key': correlation_key,
-                        'correlation_strength': correlation_strength,
-                        'component': entry.component,
-                        'log_group': log_group
-                    }
-                )
-                
-                timelines[correlation_key].append(event)
+                # Add event to ALL matched timelines
+                for correlation_key, correlation_strength in matched_keys:
+                    event = TimelineEvent(
+                        timestamp=ts,
+                        source=source_type,
+                        event_type=self._classify_event_type(entry, source_type),
+                        severity=entry.severity or "UNKNOWN",
+                        actor=correlation_key.split(':')[1],
+                        message=entry.message or entry.content[:200],
+                        metadata={
+                            'correlation_key': correlation_key,
+                            'correlation_strength': correlation_strength,
+                            'component': entry.component,
+                            'log_group': log_group
+                        }
+                    )
+                    
+                    timelines[correlation_key].append(event)
         
         # Sort each timeline by timestamp
         for key in timelines:

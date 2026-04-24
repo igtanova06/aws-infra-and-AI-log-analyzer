@@ -60,6 +60,7 @@ class LogParser:
     
     def parse_log_entry(self, match) -> Optional[LogEntry]:
         """Parse a log line into structured data"""
+        cw_timestamp = None
         if isinstance(match, str):
             line = match
             file_name = ""
@@ -68,6 +69,7 @@ class LogParser:
             line = match.get('content', '')
             file_name = match.get('file', '')
             line_num = match.get('line_number', 0)
+            cw_timestamp = match.get('timestamp')
         
         if not line:
             return None
@@ -75,7 +77,8 @@ class LogParser:
         entry = LogEntry(
             file=file_name,
             line_number=line_num,
-            content=line
+            content=line,
+            timestamp=cw_timestamp
         )
         
         # 1. Modern JSON Application Logs (Streamlit, Node.js, etc.)

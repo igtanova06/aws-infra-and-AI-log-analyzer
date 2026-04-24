@@ -111,13 +111,22 @@ class CloudWatchClient:
                                 break
                             
                             message = event.get('message', '')
+                            # Get CloudWatch timestamp (ms to isoformat)
+                            cw_ts = event.get('timestamp')
+                            ts_iso = datetime.fromtimestamp(cw_ts / 1000.0).isoformat() if cw_ts else ""
+                            
+                            log_obj = {
+                                'content': message,
+                                'timestamp': ts_iso,
+                                'file': stream_name
+                            }
                             
                             # Filter by search term if provided
                             if search_term:
                                 if search_term.lower() in message.lower():
-                                    logs.append(message)
+                                    logs.append(log_obj)
                             else:
-                                logs.append(message)
+                                logs.append(log_obj)
                         
                         # Check if there are more pages
                         new_token = events_response.get('nextForwardToken')

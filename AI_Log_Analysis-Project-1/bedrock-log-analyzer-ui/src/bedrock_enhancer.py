@@ -387,6 +387,10 @@ class BedrockEnhancer:
             "✓ Reference SPECIFIC log entries as evidence\n"
             "✓ Calculate METRICS from the data (frequency, duration)\n"
             "✓ Explain WHY this is an attack (not just what happened)\n"
+            "✓ KEEP IT CONCISE. Use maximum 1-2 short sentences for text fields.\n"
+            "✓ Limit `evidence_from_logs` array to MAXIMUM 3 entries.\n"
+            "✓ MITRE ATT&CK Mapping: MUST match the actual port/service (e.g. Port 3306 is NOT RDP, it is MySQL. Use T1190 or T1078 instead).\n"
+            "✓ INCIDENT RESPONSE: NEVER block internal/destination IPs (e.g., 10.x.x.x, 172.x.x.x, 192.168.x.x). ALWAYS block the external SOURCE/ATTACKER IP.\n"
             "✗ NO generic advice without evidence\n"
             "✗ NO placeholder values like <instance-id>\n"
             "✗ NO assumptions not supported by logs\n\n"
@@ -544,7 +548,7 @@ class BedrockEnhancer:
                 
                 # Check if it's a throttling error
                 if 'ThrottlingException' in error_msg or 'TooManyRequestsException' in error_msg:
-                    wait_time = (2 ** attempt) * 1  # Exponential backoff: 1s, 2s, 4s
+                    wait_time = (2 ** attempt) * 4  # Exponential backoff: 4s, 8s, 16s
                     print(f"[Bedrock API] Throttled on attempt {attempt + 1}, waiting {wait_time}s...")
                     time.sleep(wait_time)
                     continue

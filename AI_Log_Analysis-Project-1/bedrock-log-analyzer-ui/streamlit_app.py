@@ -266,7 +266,7 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         st.info("🔗 Running cross-source correlation (Advanced)...")
                         
                         rules_path = os.path.join(os.path.dirname(__file__), 'correlation_rules.json')
-                        correlator = AdvancedCorrelator(rules_path=rules_path)
+                        correlator = AdvancedCorrelator(rules_config_path=rules_path)
                         
                         correlated_events = correlator.correlate_multi_source(
                             log_entries=all_parsed_entries,
@@ -286,13 +286,13 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                             from models import Solution, IssueType
                             for event in correlated_events:
                                 solution = Solution(
-                                    problem=event.attack_name,
+                                    problem=f"🚨 [CORRELATED ATTACK] {event.attack_name}",
                                     issue_type=IssueType.SECURITY,
                                     affected_components=event.sources,
                                     solution=event.ai_recommendation,
                                     ai_enhanced=False
                                 )
-                                solutions.append(solution)
+                                solutions.insert(0, solution)
                             
                             # Build correlation metadata for AI
                             correlation_metadata = {
@@ -349,9 +349,13 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         st.info("🤖 Enhancing with AI...")
                         enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
                         
+                        # Limit to top 5 issues to prevent AI token limit truncation
+                        # (Correlated events are already at the front)
+                        solutions_to_enhance = solutions[:5]
+                        
                         if enhancer.is_available():
                             enhanced_solutions, usage_stats = enhancer.enhance_solutions(
-                                solutions, ai_context=ai_context
+                                solutions_to_enhance, ai_context=ai_context
                             )
                             
                             if "error" in usage_stats:
@@ -596,7 +600,8 @@ else:
         else:
             st.info("No error patterns found")
 
-    with tab3:
+    solutions_tab = tab4 if has_correlation else tab3
+    with solutions_tab:
         st.subheader("Suggested Solutions")
         if result.solutions:
             for i, solution in enumerate(result.solutions, 1):

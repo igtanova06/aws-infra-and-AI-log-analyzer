@@ -12,42 +12,20 @@ resource "aws_lb" "alb" {
 	}
 }
 
-resource "aws_lb_target_group" "app" {
-	name_prefix     = "p1-tg-" # Tên ngắn lại để AWS thêm mã ngẫu nhiên vào sau
-	port     = local.ports.app
-	protocol = "HTTP"
-	target_type = "instance"
-	vpc_id   = aws_vpc.main.id
-
-	health_check {
-		enabled             = true
-		healthy_threshold   = 3
-		interval            = 30
-		matcher             = "200-399"
-		path                = "/_stcore/health"
-		port                = "traffic-port"
-		protocol            = "HTTP"
-		timeout             = 10
-		unhealthy_threshold = 5
-	}
-
-	lifecycle {
-		create_before_destroy = true
-	}
-
-	tags = {
-		Name = "${local.name_prefix}-tg"
-	}
-}
-
 resource "aws_lb_listener" "app" {
 	load_balancer_arn = aws_lb.alb.arn
 	port = local.ports.http
 	protocol = "HTTP"
+	# Gợi ý: Sửa lại default action trong alb.tf
 	default_action {
-		type = "forward"
-		target_group_arn = aws_lb_target_group.app.arn
+	type = "fixed-response"
+	fixed_response {
+		content_type = "text/plain"
+		message_body = "404: Not Found"
+		status_code  = "404"
+	  }
 	}
+
 }
 
 # ── Target Group cho Web App QLSV (Port 8080) ────────────────────────
@@ -91,10 +69,7 @@ resource "aws_lb_listener_rule" "qlsv" {
 
   condition {
     path_pattern {
-      # Gộp lại thành 5 cái để AWS không la mắng nữa
       values = ["/qlsv*", "/api/*", "/admin/*", "/assets/*", "/*.php"] 
     }
   }
 }
-
-# Gắn Target Group mới vào ASG

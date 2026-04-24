@@ -7,51 +7,10 @@ resource "aws_db_subnet_group" "db" {
   }
 }
 
-resource "random_password" "db_password" {
-  length           = 16
-  special          = true
-  override_special = "!#$%"
-}
-
-resource "aws_db_instance" "main" {
-  identifier           = "${local.name_prefix}-db"
-  instance_class       = "db.t3.micro"
-  engine               = "mysql"
-  engine_version       = "8.0"
-  username             = var.db_username 
-  password             = random_password.db_password.result # Dùng pass ngẫu nhiên
-  db_name              = "qlsv_system"
-  
-  allocated_storage     = 20
-  storage_type          = "gp2"
-  db_subnet_group_name  = aws_db_subnet_group.db.name
-  vpc_security_group_ids = [aws_security_group.db.id]
-  skip_final_snapshot   = true
-  multi_az             = false
-  
-  # Enable CloudWatch Logs export
-  enabled_cloudwatch_logs_exports = ["error", "slowquery"]
-  
-  # Performance Insights - Disabled for Free Tier
-  performance_insights_enabled = false
-  
-  # Backup configuration - Free Tier limits
-  backup_retention_period = 0  # Free Tier doesn't support automated backups
-  # backup_window          = "03:00-04:00"  # Not needed when retention = 0
-  maintenance_window     = "mon:04:00-mon:05:00"
-  
-  tags = {
-    Name        = "${local.name_prefix}-db"
-    Environment = var.env
-  }
+data "aws_db_instance" "existing_db" {
+  db_instance_identifier = var.existing_db_identifier
 }
 
 output "db_endpoint" {
-  value = aws_db_instance.main.address
-}
-
-# Output này giúp bạn lấy mật khẩu mà không cần mò vào Console
-output "db_password" {
-  value     = random_password.db_password.result
-  sensitive = true
+  value = data.aws_db_instance.existing_db.endpoint
 }

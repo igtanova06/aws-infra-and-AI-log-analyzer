@@ -2,4 +2,25 @@
 *.tfstate
 *.tfstate.backup
 *.tfvars
-# .terraform.lock.hcl nên được commit — đảm bảo cả team dùng cùng provider version
+# .terraform.lock.hcl nên được commit — đảm bảo cả team dùng cùng provider version
+
+# Secrets and sensitive files
+.env
+*.env
+!.env.example
+**/*_COMPLETE.md
+**/TELEGRAM_SETUP_COMPLETE.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

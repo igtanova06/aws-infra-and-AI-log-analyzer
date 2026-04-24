@@ -9,6 +9,11 @@ temperature: 0.3
 # --- Application Configuration ---
 app_port: 8501
 
+# --- Telegram Bot Configuration ---
+telegram_bot_token: "8721800274:AAFDTroQlg8T4KT07nIpeyPV0G3Z3ZHu1gs"
+telegram_chat_id: "8788132884"
+telegram_alerts_enabled: true
+
 # --- Patch Management ---
 # Chỉ set true nếu bạn chủ động muốn apply security patches
 apply_security_patches: false

@@ -23,6 +23,11 @@ class TelegramNotifier:
         self.versus_url = versus_url or os.getenv("VERSUS_INCIDENT_URL", "http://localhost:3000")
         self.enabled = os.getenv("TELEGRAM_ALERTS_ENABLED", "false").lower() == "true"
         
+        # Direct Telegram API configuration
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        self.use_direct_telegram = bool(self.bot_token and self.chat_id)
+        
     def send_attack_alert(
         self, 
         global_rca: Dict = None,
@@ -51,6 +56,11 @@ class TelegramNotifier:
         # Build alert payload
         payload = self._build_alert_payload(global_rca, correlated_events, analysis_metadata)
         
+        # Try direct Telegram API first if configured
+        if self.use_direct_telegram:
+            return self._send_direct_telegram(payload)
+        
+        # Fallback to Versus Incident service
         try:
             response = requests.post(
                 f"{self.versus_url}/api/incidents",
@@ -60,7 +70,7 @@ class TelegramNotifier:
             )
             
             if response.status_code == 200:
-                print(f"[Telegram] ✅ Alert sent successfully")
+                print(f"[Telegram] ✅ Alert sent successfully via Versus")
                 return True
             else:
                 print(f"[Telegram] ❌ Failed to send alert: {response.status_code} - {response.text}")
@@ -69,6 +79,113 @@ class TelegramNotifier:
         except requests.exceptions.RequestException as e:
             print(f"[Telegram] ❌ Connection error: {e}")
             return False
+    
+    def _send_direct_telegram(self, payload: Dict) -> bool:
+        """
+        Send alert directly to Telegram API (bypass Versus Incident)
+        
+        Args:
+            payload: Alert payload
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        try:
+            # Format message for Telegram
+            message = self._format_telegram_message(payload)
+            
+            # Send to Telegram API
+            telegram_url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+            response = requests.post(
+                telegram_url,
+                json={
+                    "chat_id": self.chat_id,
+                    "text": message,
+                    "parse_mode": "HTML"
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                print(f"[Telegram] ✅ Alert sent directly to Telegram")
+                return True
+            else:
+                print(f"[Telegram] ❌ Telegram API error: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"[Telegram] ❌ Direct Telegram error: {e}")
+            return False
+    
+    def _format_telegram_message(self, payload: Dict) -> str:
+        """
+        Format alert payload as Telegram message
+        
+        Args:
+            payload: Alert payload
+            
+        Returns:
+            str: Formatted message
+        """
+        import html
+        
+        attack_name = payload.get("attack_name", "Unknown Attack")
+        severity = payload.get("severity", "Unknown")
+        confidence = payload.get("confidence", "N/A")
+        attacker_ip = payload.get("attacker_ip", "Unknown")
+        root_cause = payload.get("root_cause", "N/A")
+        
+        # Escape HTML entities to prevent parsing errors
+        attack_name = html.escape(attack_name)
+        root_cause = html.escape(root_cause[:500])
+        attacker_ip = html.escape(attacker_ip)
+        
+        # Severity emoji
+        severity_emoji = {
+            "Critical": "🔴",
+            "High": "🟠",
+            "Medium": "🟡",
+            "Low": "🟢"
+        }.get(severity, "⚪")
+        
+        message = f"""🚨 <b>SECURITY ALERT</b> 🚨
+
+{severity_emoji} <b>{attack_name}</b>
+
+<b>Severity:</b> {severity}
+<b>Confidence:</b> {confidence}
+<b>Attacker IP:</b> {attacker_ip}
+
+<b>🔍 Root Cause:</b>
+{root_cause}
+
+<b>⏰ Detected:</b> {payload.get('timestamp', 'N/A')}
+<b>📊 Logs Analyzed:</b> {payload.get('total_logs_analyzed', 0)}
+"""
+        
+        # Add affected components
+        components = payload.get("affected_components", [])
+        if components:
+            message += f"\n<b>🏗️ Affected Components:</b>\n"
+            for comp in components[:3]:
+                comp_escaped = html.escape(str(comp))
+                message += f"  • {comp_escaped}\n"
+        
+        # Add immediate actions
+        actions = payload.get("immediate_actions", [])
+        if actions:
+            message += f"\n<b>🔥 Immediate Actions:</b>\n"
+            for action in actions[:3]:
+                action_escaped = html.escape(str(action)[:200])  # Limit length
+                message += f"  • {action_escaped}\n"
+        
+        # Add MITRE techniques
+        mitre = payload.get("mitre_techniques", "")
+        if mitre and mitre != "N/A":
+            mitre_escaped = html.escape(str(mitre))
+            message += f"\n<b>🗺️ MITRE ATT&CK:</b> {mitre_escaped}\n"
+        
+        return message
     
     def _build_alert_payload(
         self, 
@@ -183,6 +300,11 @@ class TelegramNotifier:
             "correlation_count": 0
         }
         
+        # Use direct Telegram if configured
+        if self.use_direct_telegram:
+            return self._send_direct_telegram(test_payload)
+        
+        # Fallback to Versus Incident
         try:
             response = requests.post(
                 f"{self.versus_url}/api/incidents",

@@ -11,6 +11,10 @@ import os
 from datetime import datetime, timedelta, date, time
 import json
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
@@ -410,17 +414,19 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                     # ============================================================
                     # Step 8: Send Telegram Alert (if enabled and attack detected)
                     # ============================================================
-                    if global_rca and correlated_events:
+                    # Send alert if we have Global RCA (regardless of correlation)
+                    if global_rca:
                         st.info("📱 Sending Telegram alert...")
                         try:
                             notifier = TelegramNotifier()
+                            
                             alert_metadata = {
                                 "time_range": time_range_str,
                                 "total_logs": len(all_parsed_entries),
                             }
                             alert_sent = notifier.send_attack_alert(
                                 global_rca=global_rca.__dict__ if hasattr(global_rca, '__dict__') else global_rca,
-                                correlated_events=correlated_events,
+                                correlated_events=correlated_events,  # Can be empty list
                                 analysis_metadata=alert_metadata
                             )
                             if alert_sent:
@@ -428,7 +434,9 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                             else:
                                 st.warning("⚠️ Telegram alert not sent (check configuration)")
                         except Exception as telegram_error:
-                            st.warning(f"⚠️ Telegram alert failed: {telegram_error}")
+                            st.error(f"⚠️ Telegram alert failed: {telegram_error}")
+                            import traceback
+                            st.code(traceback.format_exc())
 
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")

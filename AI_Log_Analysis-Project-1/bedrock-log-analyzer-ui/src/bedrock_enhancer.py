@@ -345,38 +345,64 @@ class BedrockEnhancer:
         }
         prompt += attack_guidance.get(ctx.source_type, "")
         
-        # Enhanced analysis instructions
+        # Enhanced analysis instructions with MANDATORY 5 Why
         prompt += (
             "# YOUR TASK: COMPREHENSIVE SECURITY ANALYSIS\n\n"
             "Analyze each issue using the MITRE ATT&CK framework and provide:\n\n"
             "1. **THREAT CLASSIFICATION**\n"
-            "   - Attack technique (e.g., T1110 Brute Force, T1078 Valid Accounts)\n"
+            "   - Attack technique (e.g., T1498 Network DoS, T1110 Brute Force, T1078 Valid Accounts)\n"
             "   - Threat actor profile (script kiddie, APT, insider)\n"
-            "   - Attack stage (reconnaissance, initial access, persistence, etc.)\n\n"
+            "   - Attack stage (reconnaissance, initial access, persistence, impact, etc.)\n"
+            "   ⚠️ CRITICAL: Match MITRE technique to ACTUAL attack type:\n"
+            "      • DoS/DDoS → TA0040 Impact + T1498 Network Denial of Service\n"
+            "      • Brute Force → TA0001 Initial Access + T1110 Brute Force\n"
+            "      • Exploit → TA0001 Initial Access + T1190 Exploit Public-Facing Application\n\n"
             "2. **EVIDENCE-BASED ANALYSIS**\n"
             "   - Quote EXACT log entries that prove the attack\n"
             "   - Identify attack timeline (first seen, peak activity, last seen)\n"
-            "   - Calculate attack metrics (attempts/minute, success rate)\n\n"
+            "   - Calculate attack metrics (attempts/minute, success rate)\n"
+            "   ⚠️ CRITICAL: Use CONSERVATIVE language for inferred data:\n"
+            "      • BAD: '500 concurrent connections' (if not explicitly in logs)\n"
+            "      • GOOD: 'High volume of incoming connections (~500 requests observed within short time window)'\n"
+            "      • BAD: 'No WAF configured' (if no WAF info in logs)\n"
+            "      • GOOD: 'No evidence of WAF or rate limiting observed in logs'\n\n"
             "3. **IMPACT ASSESSMENT**\n"
             "   - Severity: Critical/High/Medium/Low with justification\n"
             "   - Blast radius: Which systems/data are at risk\n"
             "   - Business impact: Downtime, data loss, compliance violation\n\n"
-            "4. **ROOT CAUSE ANALYSIS**\n"
-            "   - Primary vulnerability exploited\n"
-            "   - Why existing controls failed\n"
-            "   - Alternative attack vectors ruled out\n\n"
-            "5. **IMMEDIATE RESPONSE**\n"
-            "   - Containment: Block attacker IP/user NOW\n"
+            "4. **ROOT CAUSE ANALYSIS (MANDATORY 5 WHY)**\n"
+            "   ⚠️ CRITICAL: You MUST perform a 5 Why analysis to find the TRUE root cause.\n"
+            "   Do NOT stop at symptoms like 'attack happened' or 'DoS detected'.\n"
+            "   Dig deeper with each 'Why?' to find the TECHNICAL FAILURE first, then PROCESS GAP.\n\n"
+            "   🎯 CRITICAL RULE: Root Cause vs WHY #5\n"
+            "   • Root Cause = TECHNICAL failure (log-based, e.g., 'connection pool exhausted')\n"
+            "   • WHY #5 = PROCESS GAP (missing control in deployment/operations)\n"
+            "   • These are DIFFERENT things! Do NOT call WHY #5 'root cause'!\n\n"
+            "   Example of GOOD 5 Why:\n"
+            "   WHY #1: Why did service degrade? → Because connection pool exhausted (100/100)\n"
+            "   WHY #2: Why did pool exhaust? → Because high volume of incoming connections (~500 requests observed)\n"
+            "   WHY #3: Why did connections succeed? → Because no evidence of rate limiting in logs\n"
+            "   WHY #4: Why no rate limiting? → Because ALB deployed without WAF\n"
+            "   WHY #5: Why deployed without WAF? → ⭐ PROCESS GAP: Missing security controls in deployment checklist (e.g., WAF, rate limiting)\n"
+            "   ROOT CAUSE: Connection pool exhausted (100/100) due to high connection volume\n\n"
+            "   Example of BAD 5 Why (DO NOT DO THIS):\n"
+            "   WHY #1: Why did incident occur? → Because of DoS attack ❌ (This is a symptom!)\n"
+            "   WHY #5: ROOT CAUSE = Missing WAF ❌ (This is WHY #5, NOT root cause!)\n"
+            "   ROOT CAUSE: DoS attack ❌ (This is NOT a root cause!)\n\n"
+            "5. **ATTACK PROGRESSION (SIGNATURE)**\n"
+            "   Identify the full attack chain if multiple stages detected:\n"
+            "   1. Reconnaissance: Port scanning via VPC REJECT events\n"
+            "   2. Network Flood: High-frequency connection attempts\n"
+            "   3. Application Flood: Increased HTTP request rate\n"
+            "   4. Resource Exhaustion: Connection pool saturation\n"
+            "   5. Service Degradation: Timeouts and HTTP 500 errors\n\n"
+            "6. **IMMEDIATE RESPONSE**\n"
+            "   - Containment: Block attacker IPs (if multiple IPs, block all or use rate limiting)\n"
+            "   - Scaling: Increase connection pool, scale up instances (strategic response)\n"
+            "   - Rate Limiting: Enable rate limiting on ALB/WAF (strategic response)\n"
             "   - Verification: Command to confirm attack stopped\n"
-            "   - Evidence preservation: Logs to save for forensics\n\n"
-            "6. **REMEDIATION STEPS**\n"
-            "   - Short-term fixes (< 1 hour)\n"
-            "   - Medium-term hardening (< 1 day)\n"
-            "   - Long-term prevention (< 1 week)\n\n"
-            "7. **PREVENTION STRATEGY**\n"
-            "   - AWS security controls to enable (GuardDuty, WAF, etc.)\n"
-            "   - Configuration changes (Security Groups, IAM policies)\n"
-            "   - Monitoring improvements (CloudWatch Alarms, SNS alerts)\n\n"
+            "   - Evidence preservation: Logs to save for forensics\n"
+            "   ⚠️ CRITICAL: Prioritize STRATEGIC actions (rate limiting, scaling) over TACTICAL (block single IP)\n\n"
         )
         
         # Critical rules
@@ -389,14 +415,24 @@ class BedrockEnhancer:
             "✓ Explain WHY this is an attack (not just what happened)\n"
             "✓ KEEP IT CONCISE. Use maximum 1-2 short sentences for text fields.\n"
             "✓ Limit `evidence_from_logs` array to MAXIMUM 3 entries.\n"
-            "✓ MITRE ATT&CK Mapping: MUST match the actual port/service (e.g. Port 3306 is NOT RDP, it is MySQL. Use T1190 or T1078 instead).\n"
+            "✓ MITRE ATT&CK Mapping: MUST match the actual attack type:\n"
+            "   • DoS/DDoS → TA0040 Impact + T1498 Network Denial of Service (NOT T1190!)\n"
+            "   • Port 3306 attacks → T1190 Exploit or T1078 Valid Accounts (NOT RDP!)\n"
+            "   • Brute Force → TA0001 Initial Access + T1110 Brute Force\n"
             "✓ INCIDENT RESPONSE: NEVER block internal/destination IPs (e.g., 10.x.x.x, 172.x.x.x, 192.168.x.x). ALWAYS block the external SOURCE/ATTACKER IP.\n"
+            "✓ EVIDENCE WORDING: Use conservative language for inferred data:\n"
+            "   • 'High volume of connections (~500 observed)' NOT '500 concurrent connections'\n"
+            "   • 'No evidence of WAF in logs' NOT 'No WAF configured'\n"
+            "✓ ROOT CAUSE vs WHY #5: These are DIFFERENT!\n"
+            "   • Root Cause = Technical failure (e.g., 'connection pool exhausted')\n"
+            "   • WHY #5 = Process gap (e.g., 'Missing security controls in deployment checklist')\n"
             "✗ NO generic advice without evidence\n"
             "✗ NO placeholder values like <instance-id>\n"
-            "✗ NO assumptions not supported by logs\n\n"
+            "✗ NO assumptions not supported by logs\n"
+            "✗ DO NOT call WHY #5 'root cause' - it's a PROCESS GAP!\n\n"
         )
         
-        # JSON schema
+        # JSON schema with 5 Why structure
         prompt += (
             "# OUTPUT FORMAT\n"
             "Return ONLY a valid JSON array (no markdown, no explanation):\n\n"
@@ -404,9 +440,18 @@ class BedrockEnhancer:
             "  {\n"
             '    "problem": "exact original problem title",\n'
             '    "attack_classification": {\n'
-            '      "mitre_technique": "T1110.001 - Password Guessing",\n'
+            '      "mitre_technique": "T1498 - Network Denial of Service (for DoS) OR T1110.001 - Password Guessing (for brute force)",\n'
+            '      "mitre_tactic": "TA0040 - Impact (for DoS) OR TA0001 - Initial Access (for brute force)",\n'
             '      "threat_actor_profile": "Automated bot / Script kiddie / APT",\n'
-            '      "attack_stage": "Initial Access / Persistence / Privilege Escalation"\n'
+            '      "attack_stage": "Initial Access / Persistence / Privilege Escalation / Impact"\n'
+            '    },\n'
+            '    "attack_progression": {\n'
+            '      "stages_detected": [\n'
+            '        {"stage": "Reconnaissance", "description": "Port scanning via VPC REJECT events (ports 22, 3306, 443)", "evidence": "215 REJECT events"},\n'
+            '        {"stage": "Network Flood", "description": "High-frequency connection attempts", "evidence": "~500 connections in 2 minutes"},\n'
+            '        {"stage": "Resource Exhaustion", "description": "Connection pool saturation", "evidence": "Pool 100/100"},\n'
+            '        {"stage": "Service Degradation", "description": "Timeouts and errors", "evidence": "HTTP 500 errors, RDS timeout"}\n'
+            '      ]\n'
             '    },\n'
             '    "summary": {\n'
             '      "severity": "Critical / High / Medium / Low",\n'
@@ -436,24 +481,65 @@ class BedrockEnhancer:
             '      ],\n'
             '      "why_not_other_causes": "Explanation ruling out false positives"\n'
             '    },\n'
+            '    "root_cause_analysis": {\n'
+            '      "root_cause": "TECHNICAL FAILURE from logs (e.g., Connection pool exhausted 100/100)",\n'
+            '      "why_1": {\n'
+            '        "question": "Why did the incident occur?",\n'
+            '        "answer": "Because [specific symptom with evidence]",\n'
+            '        "evidence": "Quote exact log entry showing the symptom"\n'
+            '      },\n'
+            '      "why_2": {\n'
+            '        "question": "Why did [answer from why_1] happen?",\n'
+            '        "answer": "Because [dig deeper with conservative wording]",\n'
+            '        "evidence": "Use conservative language: ~500 connections observed, NOT 500 concurrent"\n'
+            '      },\n'
+            '      "why_3": {\n'
+            '        "question": "Why did [answer from why_2] happen?",\n'
+            '        "answer": "Because [keep digging]",\n'
+            '        "evidence": "Conservative: No evidence of rate limiting in logs, NOT No rate limiting configured"\n'
+            '      },\n'
+            '      "why_4": {\n'
+            '        "question": "Why did [answer from why_3] happen?",\n'
+            '        "answer": "Because [almost there]",\n'
+            '        "evidence": "Conservative: No evidence of WAF in logs, NOT No WAF configured"\n'
+            '      },\n'
+            '      "why_5": {\n'
+            '        "question": "Why did [answer from why_4] happen?",\n'
+            '        "answer": "⭐ PROCESS GAP: Missing security controls in deployment checklist (e.g., WAF, rate limiting)",\n'
+            '        "evidence": "This is a PROCESS GAP, NOT root cause!"\n'
+            '      },\n'
+            '      "root_cause_summary": "One sentence: The TECHNICAL root cause (e.g., Connection pool exhausted due to high connection volume)"\n'
+            '    },\n'
+            '    "control_gaps": {\n'
+            '      "critical": [\n'
+            '        {\n'
+            '          "control": "AWS WAF on ALB",\n'
+            '          "expected": "WAF with rate limiting (100 req/min per IP)",\n'
+            '          "actual": "No evidence of WAF or rate limiting observed in logs",\n'
+            '          "impact": "Allows high-volume unfiltered connections, leading to resource exhaustion"\n'
+            '        }\n'
+            '      ],\n'
+            '      "medium": [\n'
+            '        {\n'
+            '          "control": "Connection Pool Size",\n'
+            '          "expected": "500 connections",\n'
+            '          "actual": "100 connections (observed in logs)",\n'
+            '          "impact": "Pool exhaustion under moderate load"\n'
+            '        }\n'
+            '      ]\n'
+            '    },\n'
             '    "action_plan": {\n'
-            '      "immediate_containment": "Block IP 203.0.113.42 in Security Group sg-abc123",\n'
-            '      "next_best_command": "aws ec2 revoke-security-group-ingress --group-id sg-abc123 --protocol tcp --port 22 --cidr 203.0.113.42/32",\n'
+            '      "immediate_containment": [\n'
+            '        "Enable rate limiting on ALB (strategic)",\n'
+            '        "Scale up application instances (strategic)",\n'
+            '        "Increase connection pool temporarily (strategic)",\n'
+            '        "Block attacker IPs if identified (tactical)"\n'
+            '      ],\n'
+            '      "next_best_command": "aws elbv2 modify-load-balancer-attributes --load-balancer-arn <arn> --attributes Key=routing.http.drop_invalid_header_fields.enabled,Value=true",\n'
             '      "verification_commands": [\n'
-            '        "aws logs tail /aws/ec2/applogs --since 5m | grep 203.0.113.42",\n'
-            '        "aws ec2 describe-security-groups --group-ids sg-abc123"\n'
-            '      ],\n'
-            '      "fix_steps": [\n'
-            '        "1. Verify attacker IP is blocked (run verification commands)",\n'
-            '        "2. Review all SSH access logs for successful logins",\n'
-            '        "3. Rotate SSH keys if any successful access detected",\n'
-            '        "4. Enable fail2ban on all SSH-accessible instances"\n'
-            '      ],\n'
-            '      "prevention": {\n'
-            '        "aws_services": ["Enable AWS GuardDuty", "Configure VPC Flow Logs alerts"],\n'
-            '        "configuration": ["Disable password auth, use SSH keys only", "Implement rate limiting"],\n'
-            '        "monitoring": ["CloudWatch Alarm for >10 failed SSH in 5min", "SNS notification to security team"]\n'
-            '      }\n'
+            '        "aws logs tail /aws/ec2/applogs --since 5m | grep ERROR",\n'
+            '        "aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name TargetResponseTime"\n'
+            '      ]\n'
             '    }\n'
             "  }\n"
             "]\n\n"
@@ -483,7 +569,7 @@ class BedrockEnhancer:
                     # Claude format
                     body = {
                         "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 4096,
+                        "max_tokens": 8192,  # Increased from 4096 to 8192 for deeper analysis
                         "temperature": 0.3,
                         "messages": [
                             {
@@ -502,7 +588,7 @@ class BedrockEnhancer:
                             }
                         ],
                         "inferenceConfig": {
-                            "maxTokens": 4096,
+                            "maxTokens": 8192,  # Increased from 4096 to 8192 for deeper analysis
                             "temperature": 0.3,
                             "topP": 0.9
                         }
@@ -616,6 +702,15 @@ class BedrockEnhancer:
                                 # New structured format
                                 enhanced_text = "See Details"
                                 structured_data = raw_val
+                                
+                                # Validate RCA quality
+                                validation = self._validate_rca_quality(structured_data)
+                                print(f"[RCA Quality Check] Issue {i+1}: Grade {validation['grade']} (Score: {validation['quality_score']}/100)")
+                                for fb in validation['feedback']:
+                                    print(f"  {fb}")
+                                
+                                if not validation['is_acceptable']:
+                                    print(f"[RCA Quality Warning] Issue {i+1} has low quality RCA (score < 70)")
                                 
                                 # Validate required fields
                                 if "summary" not in structured_data:
@@ -753,6 +848,84 @@ class BedrockEnhancer:
         print(f"[Bedrock Parse] All repair attempts failed. Raw snippet: {text[:300]}")
         return None
 
+    def _validate_rca_quality(self, parsed_response: dict) -> dict:
+        """
+        Validate if RCA is deep enough with evidence.
+        Returns quality score and feedback.
+        """
+        quality_score = 0
+        feedback = []
+        
+        # Check 1: Has root_cause_analysis section?
+        if 'root_cause_analysis' in parsed_response:
+            rca = parsed_response['root_cause_analysis']
+            
+            # Check for 5 Why questions
+            why_count = sum(1 for k in rca.keys() if k.startswith('why_'))
+            if why_count >= 5:
+                quality_score += 40
+                feedback.append(f"✅ Complete 5 Why analysis ({why_count} questions)")
+            elif why_count >= 3:
+                quality_score += 20
+                feedback.append(f"⚠️ Partial 5 Why analysis ({why_count}/5 questions)")
+            else:
+                feedback.append(f"❌ Incomplete 5 Why analysis ({why_count}/5 questions)")
+            
+            # Check for evidence in Why answers
+            evidence_count = 0
+            for i in range(1, 6):
+                why_key = f"why_{i}"
+                if why_key in rca:
+                    why_item = rca[why_key]
+                    if isinstance(why_item, dict) and 'evidence' in why_item and len(why_item.get('evidence', '')) > 10:
+                        evidence_count += 1
+            
+            if evidence_count >= 4:
+                quality_score += 20
+                feedback.append(f"✅ Evidence provided for {evidence_count}/5 Why answers")
+            elif evidence_count >= 2:
+                quality_score += 10
+                feedback.append(f"⚠️ Evidence provided for only {evidence_count}/5 Why answers")
+            else:
+                feedback.append(f"❌ Insufficient evidence ({evidence_count}/5 Why answers)")
+            
+            # Check for root_cause_summary
+            if 'root_cause_summary' in rca and len(rca['root_cause_summary']) > 20:
+                quality_score += 10
+                feedback.append("✅ Root cause summary present")
+            else:
+                feedback.append("❌ Missing or too short root cause summary")
+        else:
+            feedback.append("❌ Missing root_cause_analysis section entirely")
+        
+        # Check 2: Root cause is SPECIFIC (not generic)
+        root_cause_summary = parsed_response.get('root_cause_analysis', {}).get('root_cause_summary', '').lower()
+        
+        # Generic keywords (BAD)
+        generic_keywords = ['process', 'operations', 'comprehensive', 'robust', 'adequate', 'proper']
+        # Specific keywords (GOOD)
+        specific_keywords = ['waf', 'rate limiting', 'connection pool', 'security group', 'alb', 'firewall', 'max_connections']
+        
+        has_generic = any(kw in root_cause_summary for kw in generic_keywords)
+        has_specific = any(kw in root_cause_summary for kw in specific_keywords)
+        
+        if has_specific:
+            quality_score += 30
+            feedback.append("✅ Root cause is SPECIFIC (mentions concrete controls/configs)")
+        elif has_generic and not has_specific:
+            quality_score += 5
+            feedback.append("⚠️ Root cause is too GENERIC (lacks specific control names)")
+        else:
+            feedback.append("❌ Root cause lacks specificity")
+        
+        return {
+            'quality_score': quality_score,
+            'feedback': feedback,
+            'is_acceptable': quality_score >= 70,
+            'grade': 'A' if quality_score >= 90 else 'B' if quality_score >= 70 else 'C' if quality_score >= 50 else 'D'
+        }
+
+
     
     def _calculate_cost(self, tokens: int, input_tokens: int = None, output_tokens: int = None) -> float:
         """
@@ -804,3 +977,479 @@ class BedrockEnhancer:
             avg_cost_per_1m = 0.0875
         
         return (tokens / 1_000_000) * avg_cost_per_1m
+
+    # ================================================================
+    # Global RCA — ONE call, FULL picture
+    # ================================================================
+
+    def generate_global_rca(self, unified_context: dict) -> tuple:
+        """
+        Send ONE comprehensive API call with full cross-source context.
+        Returns (GlobalRCA, usage_stats).
+        """
+        from models import GlobalRCA
+        
+        if not self.is_available():
+            return GlobalRCA(), {"ai_enhancement_used": False, "error": "Bedrock not available"}
+        
+        prompt = self._build_global_rca_prompt(unified_context)
+        
+        try:
+            response = self._call_bedrock(prompt)
+            text = response.get('text', '')
+            usage = response.get('usage', {})
+            
+            input_tokens = usage.get('input_tokens', 0)
+            output_tokens = usage.get('output_tokens', 0)
+            total_tokens = usage.get('total_tokens', 0)
+            cost = self._calculate_cost(total_tokens, input_tokens, output_tokens)
+            
+            print(f"[Global RCA] Input: {input_tokens}, Output: {output_tokens}, Cost: ${cost:.4f}")
+            
+            # Parse JSON response
+            parsed = self._extract_json_object(text)
+            
+            if parsed:
+                rca = GlobalRCA(
+                    incident_story=parsed.get('incident_story', []),
+                    threat_assessment=parsed.get('threat_assessment', {}),
+                    attack_narrative=parsed.get('attack_narrative', ''),
+                    affected_components=parsed.get('affected_components', []),
+                    root_cause=parsed.get('root_cause', ''),
+                    mitre_mapping=parsed.get('mitre_mapping', {}),
+                    immediate_actions=parsed.get('immediate_actions', []),
+                    remediation_plan=parsed.get('remediation_plan', {}),
+                    raw_ai_response=parsed,
+                    tokens_used=total_tokens,
+                    cost=cost,
+                )
+            else:
+                rca = GlobalRCA(
+                    attack_narrative=text[:500],
+                    raw_ai_response={'raw_text': text[:1000]},
+                    tokens_used=total_tokens,
+                    cost=cost,
+                )
+            
+            stats = {
+                "ai_enhancement_used": True,
+                "bedrock_model_used": self.model_id,
+                "total_tokens_used": total_tokens,
+                "estimated_total_cost": cost,
+                "api_calls_made": 1,
+            }
+            return rca, stats
+            
+        except Exception as e:
+            print(f"[Global RCA] Error: {e}")
+            return GlobalRCA(), {"ai_enhancement_used": False, "error": str(e)}
+
+    def _build_global_rca_prompt(self, ctx: dict) -> str:
+        """Build the prompt for Global RCA using unified context with event signals."""
+        import json as _json
+        
+        prompt = (
+            "You are an expert AWS Security Operations Center (SOC) analyst.\n"
+            "You are performing a GLOBAL Root Cause Analysis across multiple AWS log sources.\n\n"
+        )
+        
+        # --- Overview ---
+        prompt += (
+            "# ENVIRONMENT OVERVIEW\n"
+            f"Sources analyzed: {ctx.get('source_count', 0)}\n"
+            f"Total log entries: {ctx.get('total_logs', 0)}\n"
+            f"Time range: {ctx.get('time_range', 'N/A')}\n"
+            f"Correlated attack patterns detected: {ctx.get('correlation_count', 0)}\n\n"
+        )
+        
+        # --- Per-source summaries ---
+        prompt += "# PER-SOURCE HEALTH SUMMARY\n"
+        for source, summary in ctx.get('source_summaries', {}).items():
+            prompt += (
+                f"## {source}\n"
+                f"  Entries: {summary.get('total_entries', 0)} | "
+                f"Errors: {summary.get('error_count', 0)} ({summary.get('error_rate', '0%')})\n"
+                f"  Severity: {_json.dumps(summary.get('severity_distribution', {}))}\n"
+            )
+            if summary.get('top_ips'):
+                ips_str = ', '.join(f"{ip['ip']}({ip['count']}x)" for ip in summary['top_ips'][:3])
+                prompt += f"  Top IPs: {ips_str}\n"
+            prompt += "\n"
+        
+        # --- Event signals (core intelligence) ---
+        prompt += "# DETECTED EVENT SIGNALS (Abstracted from raw logs)\n"
+        for i, sig in enumerate(ctx.get('signals', [])[:20], 1):
+            prompt += (
+                f"{i}. [{sig.get('severity', 'UNKNOWN')}] {sig.get('event_type', 'unknown')} "
+                f"(source: {sig.get('source', '?')}, count: {sig.get('count', 0)}, "
+                f"anomaly: {sig.get('anomaly_score', 0)})\n"
+                f"   {sig.get('description', '')[:150]}\n"
+            )
+            if sig.get('actors'):
+                prompt += f"   Actors: {', '.join(sig['actors'][:3])}\n"
+            if sig.get('time_window'):
+                prompt += f"   Window: {sig.get('time_window')}\n"
+            if sig.get('indicators'):
+                prompt += f"   Indicators: {_json.dumps(sig['indicators'])[:200]}\n"
+        prompt += "\n"
+        
+        # --- Correlated incident timeline ---
+        if ctx.get('incident_timeline'):
+            prompt += "# CORRELATED INCIDENT TIMELINE (Cross-source, chronological)\n"
+            for evt in ctx['incident_timeline'][:15]:
+                prompt += (
+                    f"  [{evt.get('time', '?')}] {evt.get('source', '?')}: "
+                    f"{evt.get('event', '?')} by {evt.get('actor', '?')} "
+                    f"- {evt.get('message', '')[:80]}\n"
+                )
+            prompt += "\n"
+        
+        # --- Suspicious IPs ---
+        if ctx.get('suspicious_ips'):
+            prompt += "# SUSPICIOUS IP ADDRESSES\n"
+            for ip_info in ctx['suspicious_ips']:
+                ext_label = "EXTERNAL" if ip_info.get('is_external') else "INTERNAL"
+                prompt += f"  {ip_info['ip']} - {ip_info['count']} occurrences [{ext_label}]\n"
+            prompt += "\n"
+        
+        # --- Critical raw samples (tiny selection) ---
+        if ctx.get('critical_samples'):
+            prompt += "# CRITICAL RAW LOG SAMPLES (Top 5 most severe)\n"
+            for sample in ctx['critical_samples'][:5]:
+                prompt += f"  {sample}\n"
+            prompt += "\n"
+        
+        # --- Output format ---
+        prompt += (
+            "# YOUR TASK\n"
+            "Produce a comprehensive Global Root Cause Analysis as a single JSON object.\n\n"
+            "# CRITICAL RULES\n"
+            "- Use ONLY data from the signals and logs above. NEVER invent IPs, timestamps, or events.\n"
+            "- NEVER block internal/destination IPs (10.x, 172.x, 192.168.x). Block EXTERNAL SOURCE IPs only.\n"
+            "- MITRE technique MUST match actual attack type:\n"
+            "  • DoS/DDoS → TA0040 Impact + T1498 Network Denial of Service (NOT T1190!)\n"
+            "  • Port 3306 attacks → T1190 Exploit or T1078 Valid Accounts (NOT RDP!)\n"
+            "  • Brute Force → TA0001 Initial Access + T1110 Brute Force\n"
+            "- Confidence MUST be a float between 0.0 and 1.0 with reasoning.\n"
+            "- Keep text fields concise (1-2 sentences max).\n"
+            "- MANDATORY: Perform 5 Why analysis with EVIDENCE from logs.\n"
+            "- MANDATORY: Each Why answer MUST include specific metrics/values from logs.\n"
+            "- MANDATORY: Root cause MUST be the DIRECT technical failure (e.g., 'Connection pool exhausted', 'Memory OOM').\n"
+            "- MANDATORY: WHY #5 is a PROCESS GAP (NOT root cause!) - missing controls in deployment/operations.\n"
+            "- MANDATORY: Control Gaps are SEPARATE from Root Cause (missing protections like WAF, rate limiting).\n"
+            "- MANDATORY: Use CONSERVATIVE language for inferred data:\n"
+            "  • 'High volume of connections (~500 observed)' NOT '500 concurrent connections'\n"
+            "  • 'No evidence of WAF in logs' NOT 'No WAF configured'\n\n"
+            "# ROOT CAUSE vs CONTROL GAP (CRITICAL DISTINCTION)\n"
+            "❗ ROOT CAUSE = What DIRECTLY killed the system (technical failure)\n"
+            "   Examples: 'Connection pool exhausted (100/100)', 'Memory OOM (99% heap)', 'CPU 100%'\n"
+            "   Evidence: MUST quote exact log entries showing the failure\n\n"
+            "❗ CONTROL GAP = What SHOULD HAVE prevented it (missing protection)\n"
+            "   Examples: 'No WAF', 'No rate limiting', 'Connection pool too small (100)'\n"
+            "   Evidence: Can infer from absence (e.g., 'No WAF logs found')\n\n"
+            "BAD Example (WRONG):\n"
+            "Root Cause: 'No AWS WAF on ALB' ❌ (This is a Control Gap, not Root Cause!)\n\n"
+            "GOOD Example (CORRECT):\n"
+            "Root Cause: 'Connection pool exhausted (100/100) causing request timeouts' ✅\n"
+            "Control Gap: 'No WAF to filter malicious traffic' ✅\n\n"
+            "# EVIDENCE RULES (CRITICAL)\n"
+            "❗ NEVER fabricate evidence not in logs\n"
+            "❗ If you don't see ALB config in logs, DON'T claim 'ALB config shows...'\n"
+            "❗ If you don't see WAF logs, DON'T claim 'WAF rules show...'\n"
+            "❗ Only quote ACTUAL log entries provided in the context\n\n"
+            "ALLOWED Evidence:\n"
+            "✅ Direct quotes from logs: '[ERROR] ConnectionPool: active=100/100'\n"
+            "✅ Metrics from logs: '215 REJECT events, 153 errors'\n"
+            "✅ Absence inference: 'No WAF logs found in provided log sources'\n\n"
+            "FORBIDDEN Evidence:\n"
+            "❌ 'ALB config shows...' (if no ALB config in logs)\n"
+            "❌ 'Security group rules indicate...' (if no SG logs)\n"
+            "❌ 'WAF configuration reveals...' (if no WAF logs)\n\n"
+            "# 5 WHY EVIDENCE REQUIREMENTS\n"
+            "Each Why answer MUST follow this format:\n"
+            "- WHY #1-2: Quote EXACT log entries showing DIRECT technical failure\n"
+            "  Example: 'Connection pool exhausted' with evidence '[ERROR] ConnectionPool: active=100/100 idle=0'\n"
+            "- WHY #3-4: Explain HOW the failure cascaded (use conservative language)\n"
+            "  Example: 'Pool exhausted because high volume of connections (~500 observed)' with evidence 'VPC Flow: ~500 ACCEPT events in 2 minutes'\n"
+            "- WHY #5: Identify the PROCESS GAP (NOT root cause!)\n"
+            "  Example: '⭐ PROCESS GAP: Missing security controls in deployment checklist (e.g., WAF, rate limiting)' with evidence 'No rate limiting logs found'\n\n"
+            "# CONTROL GAPS REQUIREMENTS\n"
+            "After 5 Why analysis, identify ALL security control gaps:\n"
+            "- CRITICAL: Missing controls that directly enabled the attack (e.g., No WAF, No rate limiting)\n"
+            "- MEDIUM: Insufficient controls that amplified impact (e.g., Small connection pool, No auto-scaling)\n"
+            "- LOW: Missing monitoring/alerting that delayed detection (e.g., No CloudWatch alarms)\n\n"
+            "For each gap, provide:\n"
+            "- Control name (e.g., 'AWS WAF on ALB')\n"
+            "- Expected state (e.g., 'WAF with rate limiting 100 req/min')\n"
+            "- Actual state (e.g., 'No evidence of WAF or rate limiting observed in logs')\n"
+            "- Impact (e.g., 'Allows high-volume unfiltered connections')\n"
+            "- Fix command (for critical gaps only)\n\n"
+            "BAD Example (DO NOT DO THIS):\n"
+            "WHY #1: Because system was overwhelmed ❌ (No evidence!)\n"
+            "WHY #5: Because lack of security process ❌ (Too generic!)\n\n"
+            "GOOD Example (DO THIS):\n"
+            "WHY #1: Why did service become unavailable?\n"
+            "        → Because connection pool exhausted (Evidence: '[ERROR] ConnectionPool: active=100/100 idle=0 waiting=150') ✅\n"
+            "WHY #3: Why did pool exhaust?\n"
+            "        → Because high volume of connections (~500 observed in short time window) (Evidence: 'VPC Flow: ~500 ACCEPT events in 2 minutes') ✅\n"
+            "WHY #5: Why did high-volume connections succeed?\n"
+            "        → ⭐ PROCESS GAP: Missing security controls in deployment checklist (e.g., WAF, rate limiting) (Evidence: 'No rate limiting logs found') ✅\n\n"
+            "ROOT CAUSE: Connection pool exhausted (100/100) due to high connection volume, causing request timeouts and service unavailability ✅\n\n"
+            "CONTROL GAPS:\n"
+            "🔴 Critical: No evidence of WAF or rate limiting observed in logs\n"
+            "🔴 Critical: No rate limiting (should be 100 req/min per IP)\n"
+            "🟡 Medium: Connection pool too small (100, should be 500)\n\n"
+            "# OUTPUT FORMAT (Return ONLY valid JSON, no markdown)\n"
+            "{\n"
+            '  "incident_story": [\n'
+            '    "[HH:MM:SS] Brief description with SPECIFIC values (e.g., connection pool 100/100)"\n'
+            '  ],\n'
+            '  "threat_assessment": {\n'
+            '    "severity": "Critical/High/Medium/Low",\n'
+            '    "confidence": 0.87,\n'
+            '    "reasoning": "Why this confidence level (cite specific evidence)",\n'
+            '    "scope": "Which systems/components affected with evidence"\n'
+            '  },\n'
+            '  "attack_narrative": "2-3 sentence summary with METRICS (e.g., 500 connections, 95% CPU)",\n'
+            '  "affected_components": [\n'
+            '    {"component": "/aws/vpc/flowlogs", "impact_level": "High", "evidence": "215 REJECT events from 5 attacker IPs"}\n'
+            '  ],\n'
+            '  "root_cause": "DIRECT technical failure that killed the system (e.g., Connection pool exhausted 100/100, Memory OOM 99%)",\n'
+            '  "root_cause_analysis": {\n'
+            '    "why_1": {\n'
+            '      "question": "Why did the incident occur?",\n'
+            '      "answer": "Because [SPECIFIC symptom with EXACT log quote or metric]",\n'
+            '      "evidence": "Quote exact log entry or metric value"\n'
+            '    },\n'
+            '    "why_2": {\n'
+            '      "question": "Why did [answer from why_1] happen?",\n'
+            '      "answer": "Because [dig deeper with SPECIFIC value]",\n'
+            '      "evidence": "Quote exact log entry or metric value"\n'
+            '    },\n'
+            '    "why_3": {\n'
+            '      "question": "Why did [answer from why_2] happen?",\n'
+            '      "answer": "Because [SPECIFIC missing control with conservative language]",\n'
+            '      "evidence": "What control is missing (e.g., No evidence of WAF in logs, No rate limiting observed)"\n'
+            '    },\n'
+            '    "why_4": {\n'
+            '      "question": "Why did [answer from why_3] happen?",\n'
+            '      "answer": "Because [SPECIFIC configuration gap]",\n'
+            '      "evidence": "What configuration is wrong (e.g., ALB deployed without WAF)"\n'
+            '    },\n'
+            '    "why_5": {\n'
+            '      "question": "Why did [answer from why_4] happen?",\n'
+            '      "answer": "⭐ PROCESS GAP: Missing security controls in deployment checklist (e.g., WAF, rate limiting)",\n'
+            '      "evidence": "This is a PROCESS GAP, NOT root cause! (e.g., Deployment checklist missing DDoS protection step)"\n'
+            '    },\n'
+            '    "root_cause_summary": "One sentence describing DIRECT technical failure (e.g., Connection pool exhausted 100/100 due to high connection volume)"\n'
+            '  },\n'
+            '  "control_gaps": {\n'
+            '    "critical": [\n'
+            '      {\n'
+            '        "control": "AWS WAF on ALB",\n'
+            '        "expected": "WAF with rate limiting (100 req/min per IP)",\n'
+            '        "actual": "No evidence of WAF or rate limiting observed in logs",\n'
+            '        "impact": "Allows high-volume unfiltered connections, leading to resource exhaustion",\n'
+            '        "fix": "aws wafv2 associate-web-acl --web-acl-arn arn:aws:wafv2:... --resource-arn arn:aws:elasticloadbalancing:..."\n'
+            '      }\n'
+            '    ],\n'
+            '    "medium": [\n'
+            '      {\n'
+            '        "control": "Connection Pool Size",\n'
+            '        "expected": "500 connections",\n'
+            '        "actual": "100 connections",\n'
+            '        "impact": "Pool exhaustion under moderate load"\n'
+            '      }\n'
+            '    ],\n'
+            '    "low": [\n'
+            '      {\n'
+            '        "control": "CloudWatch Alarms",\n'
+            '        "expected": "Alarm for >80% connection pool usage",\n'
+            '        "actual": "No alarms configured"\n'
+            '      }\n'
+            '    ]\n'
+            '  },\n'
+            '  "mitre_mapping": {\n'
+            '    "tactics": ["TA0040 Impact (for DoS) OR TA0001 Initial Access (for brute force)"],\n'
+            '    "techniques": ["T1498 Network Denial of Service (for DoS) OR T1110 Brute Force (for brute force) OR T1190 Exploit Public-Facing Application"]\n'
+            '  },\n'
+            '  "immediate_actions": [\n'
+            '    {"action": "Enable rate limiting on ALB (strategic)", "command": "aws elbv2 modify-load-balancer-attributes --load-balancer-arn <arn> --attributes Key=routing.http.drop_invalid_header_fields.enabled,Value=true", "priority": "P1"},\n'
+            '    {"action": "Scale up application instances (strategic)", "command": "aws autoscaling set-desired-capacity --auto-scaling-group-name <asg> --desired-capacity 5", "priority": "P1"},\n'
+            '    {"action": "Block attacker IP 203.0.113.42 (tactical)", "command": "aws ec2 revoke-security-group-ingress --group-id sg-xxx --cidr 203.0.113.42/32", "priority": "P2"}\n'
+            '  ]\n'
+            "}\n"
+        )
+        
+        return prompt
+
+    def _extract_json_object(self, text: str) -> dict:
+        """Extract a JSON object (not array) from text."""
+        # Try direct parse
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        
+        # Find { ... } block
+        match = re.search(r'\{', text)
+        if match:
+            start = match.start()
+            end = text.rfind('}') + 1
+            if end > start:
+                try:
+                    return json.loads(text[start:end])
+                except Exception:
+                    # Try repair
+                    repaired = self._safe_json_loads(f"[{text[start:end]}]")
+                    if repaired and len(repaired) > 0:
+                        return repaired[0] if isinstance(repaired[0], dict) else None
+        return None
+
+    # ================================================================
+    # Deep Dive — ONE call per source, enriched with Global RCA
+    # ================================================================
+
+    def generate_deep_dive(self, deep_dive_context: dict) -> tuple:
+        """
+        Analyze a single log group in depth, enriched with Global RCA context.
+        Returns (DeepDiveResult, usage_stats).
+        """
+        from models import DeepDiveResult
+        
+        if not self.is_available():
+            return DeepDiveResult(log_group=deep_dive_context.get('log_group', '')), {
+                "ai_enhancement_used": False, "error": "Bedrock not available"
+            }
+        
+        prompt = self._build_deep_dive_prompt(deep_dive_context)
+        
+        try:
+            response = self._call_bedrock(prompt)
+            text = response.get('text', '')
+            usage = response.get('usage', {})
+            
+            input_tokens = usage.get('input_tokens', 0)
+            output_tokens = usage.get('output_tokens', 0)
+            total_tokens = usage.get('total_tokens', 0)
+            cost = self._calculate_cost(total_tokens, input_tokens, output_tokens)
+            
+            log_group = deep_dive_context.get('log_group', '')
+            print(f"[Deep Dive: {log_group}] Input: {input_tokens}, Output: {output_tokens}, Cost: ${cost:.4f}")
+            
+            parsed = self._extract_json_object(text)
+            
+            if parsed:
+                result = DeepDiveResult(
+                    log_group=log_group,
+                    component_summary=parsed.get('component_summary', ''),
+                    specific_findings=parsed.get('specific_findings', []),
+                    recommendations=parsed.get('recommendations', []),
+                    component_metrics=deep_dive_context.get('component_metrics', {}),
+                    anomalies=deep_dive_context.get('anomalies', []),
+                    global_rca_reference=deep_dive_context.get('global_rca_summary', ''),
+                    raw_ai_response=parsed,
+                    tokens_used=total_tokens,
+                    cost=cost,
+                )
+            else:
+                result = DeepDiveResult(
+                    log_group=log_group,
+                    component_summary=text[:500],
+                    raw_ai_response={'raw_text': text[:1000]},
+                    tokens_used=total_tokens,
+                    cost=cost,
+                )
+            
+            stats = {
+                "ai_enhancement_used": True,
+                "bedrock_model_used": self.model_id,
+                "total_tokens_used": total_tokens,
+                "estimated_total_cost": cost,
+                "api_calls_made": 1,
+            }
+            return result, stats
+            
+        except Exception as e:
+            print(f"[Deep Dive] Error: {e}")
+            return DeepDiveResult(log_group=deep_dive_context.get('log_group', '')), {
+                "ai_enhancement_used": False, "error": str(e)
+            }
+
+    def _build_deep_dive_prompt(self, ctx: dict) -> str:
+        """Build prompt for Deep Dive into a single log group."""
+        import json as _json
+        
+        log_group = ctx.get('log_group', 'unknown')
+        source_type = ctx.get('source_type', 'unknown')
+        
+        prompt = (
+            f"You are an expert AWS engineer performing a DEEP DIVE analysis on: {log_group}\n"
+            f"Source type: {source_type}\n\n"
+        )
+        
+        # --- Global RCA context (so AI knows the big picture) ---
+        if ctx.get('global_rca_summary'):
+            prompt += (
+                "# GLOBAL CONTEXT (from prior Root Cause Analysis)\n"
+                f"{ctx['global_rca_summary']}\n\n"
+                "Use this context to EXPLAIN findings in this component. "
+                "You already know the attack story — now provide DEPTH, not breadth.\n\n"
+            )
+        
+        # --- Component metrics ---
+        metrics = ctx.get('component_metrics', {})
+        prompt += (
+            "# COMPONENT METRICS\n"
+            f"Total entries: {metrics.get('total_entries', 0)}\n"
+            f"Error count: {metrics.get('error_count', 0)} ({metrics.get('error_rate', '0%')})\n"
+            f"Severity distribution: {_json.dumps(metrics.get('severity_distribution', {}))}\n\n"
+        )
+        
+        # --- Anomalies ---
+        if ctx.get('anomalies'):
+            prompt += "# DETECTED ANOMALIES\n"
+            for i, anom in enumerate(ctx['anomalies'][:10], 1):
+                sec_flag = " [SECURITY]" if anom.get('is_security_relevant') else ""
+                prompt += (
+                    f"{i}. {anom.get('pattern', '?')} "
+                    f"(count: {anom.get('count', 0)}, anomaly: {anom.get('anomaly_score', 0)}){sec_flag}\n"
+                )
+            prompt += "\n"
+        
+        # --- Top IPs ---
+        if ctx.get('top_ips'):
+            prompt += "# TOP IP ADDRESSES\n"
+            for ip_info in ctx['top_ips'][:5]:
+                prompt += f"  {ip_info['ip']} - {ip_info['count']} occurrences\n"
+            prompt += "\n"
+        
+        # --- Raw samples ---
+        if ctx.get('raw_samples'):
+            prompt += "# RAW LOG SAMPLES (Most relevant)\n"
+            for i, sample in enumerate(ctx['raw_samples'][:8], 1):
+                prompt += f"{i}. {sample}\n"
+            prompt += "\n"
+        
+        # --- Output format ---
+        prompt += (
+            "# YOUR TASK\n"
+            "Provide a DEEP analysis of this specific component.\n"
+            "Use the Global Context to explain HOW this component fits into the larger incident.\n\n"
+            "# RULES\n"
+            "- Use ONLY data from the logs/metrics above\n"
+            "- Reference the Global RCA context to connect findings\n"
+            "- Provide specific, actionable recommendations\n\n"
+            "# OUTPUT FORMAT (Return ONLY valid JSON, no markdown)\n"
+            "{\n"
+            '  "component_summary": "2-3 sentence summary of this component\'s role in the incident",\n'
+            '  "specific_findings": [\n'
+            '    {"finding": "description", "severity": "High", "evidence": "log reference", "anomaly_score": 0.9}\n'
+            '  ],\n'
+            '  "recommendations": [\n'
+            '    "Specific actionable recommendation with command if applicable"\n'
+            '  ]\n'
+            "}\n"
+        )
+        
+        return prompt

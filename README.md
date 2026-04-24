@@ -1,293 +1,464 @@
-# 🔍 AI-Powered Log Analysis System
+# 🤖 AI-Powered Log Analysis & Security Monitoring System
 
-> Automated infrastructure deployment with AI-driven security log analysis using AWS Bedrock
+[![AWS](https://img.shields.io/badge/AWS-Bedrock-orange)](https://aws.amazon.com/bedrock/)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)](https://www.terraform.io/)
+[![Ansible](https://img.shields.io/badge/Config-Ansible-red)](https://www.ansible.com/)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-[![Terraform](https://img.shields.io/badge/Terraform-1.5+-purple?logo=terraform)](https://www.terraform.io/)
-[![Ansible](https://img.shields.io/badge/Ansible-2.9+-red?logo=ansible)](https://www.ansible.com/)
-[![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazon-aws)](https://aws.amazon.com/)
-[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
+Hệ thống phát hiện và phân tích tấn công mạng tự động sử dụng AI (AWS Bedrock) với khả năng tương quan logs từ nhiều nguồn và gửi cảnh báo real-time qua Telegram.
 
-## 🎯 Project Overview
+---
 
-This project demonstrates a complete DevSecOps pipeline that:
-1. **Provisions infrastructure** using Terraform (IaC)
-2. **Configures systems** using Ansible (Configuration Management)
-3. **Collects logs** from multiple sources (VPC Flow Logs, CloudTrail, Application Logs)
-4. **Analyzes security events** using AI (AWS Bedrock with Claude)
-5. **Provides root cause analysis** for security incidents
+## 🎯 Tính Năng Chính
 
-## 🏗️ Architecture
+### 🏗️ Infrastructure as Code
+- **Terraform:** Tự động triển khai VPC, EC2, RDS, ALB, CloudWatch, CloudTrail
+- **3-Tier Architecture:** Web → App → Database với security groups theo least-privilege
+- **Multi-AZ Deployment:** High availability across 3 availability zones
+
+### ⚙️ Configuration Management
+- **Ansible:** Tự động cấu hình EC2, deploy applications, setup monitoring
+- **Docker Containerization:** Isolated workloads với resource limits
+- **CloudWatch Agent:** Centralized log collection từ tất cả sources
+
+### 📊 Log Collection & Analysis
+- **Multi-Source Logs:**
+  - VPC Flow Logs (network traffic)
+  - CloudTrail (API audit logs)
+  - Application Logs (PHP errors, SQL queries)
+  - RDS Logs (database errors, slow queries)
+- **Real-time Streaming:** Logs → CloudWatch → AI Analysis
+
+### 🤖 AI-Powered Detection
+- **AWS Bedrock (Claude 3.5 Sonnet):** Advanced root cause analysis
+- **Cross-Source Correlation:** Liên kết events từ nhiều log sources
+- **Pattern Recognition:** Clustering, temporal analysis, anomaly detection
+- **MITRE ATT&CK Mapping:** Phân loại attack theo framework chuẩn
+
+### 🚨 Attack Detection
+- **SQL Injection:** Pattern matching + AI validation
+- **Brute Force:** Failed login frequency analysis
+- **Port Scanning:** Multiple connection attempts detection
+- **Privilege Escalation:** IAM policy abuse detection
+- **Data Exfiltration:** Large outbound traffic analysis
+- **Multi-Stage Attacks:** Timeline reconstruction với correlation
+
+### 📱 Real-time Alerting
+- **Telegram Integration:** Instant alerts qua Telegram Bot
+- **Versus Incident Gateway:** Multi-channel alert routing
+- **Rich Formatting:** HTML messages với evidence, commands, MITRE mapping
+- **Actionable Remediation:** AWS CLI commands để block attackers
+
+---
+
+## 🏛️ Kiến Trúc Hệ Thống
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Internet                              │
+│                    Internet                                 │
 └────────────────────────┬────────────────────────────────────┘
                          │
-                    ┌────▼────┐
-                    │   ALB   │ (Public Subnet)
-                    └────┬────┘
+                         ▼
+              ┌──────────────────────┐
+              │  Application Load    │
+              │  Balancer (ALB)      │
+              └──────────┬───────────┘
                          │
-        ┌────────────────┼────────────────┐
-        │                │                │
-   ┌────▼────┐      ┌────▼────┐     ┌────▼────┐
-   │ Web EC2 │      │ Web EC2 │     │ App EC2 │ (Private Subnet)
-   │ (QLSV)  │      │ (QLSV)  │     │(Streamlit)│
-   └────┬────┘      └────┬────┘     └────┬────┘
-        │                │                │
-        └────────────────┼────────────────┘
+         ┌───────────────┼───────────────┐
+         │               │               │
+         ▼               ▼               ▼
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Web Server  │  │ App Server  │  │ RDS MySQL   │
+│ (PHP App)   │  │ (Streamlit) │  │ (Database)  │
+│ Port 8080   │  │ Port 80     │  │ Port 3306   │
+└─────────────┘  └─────────────┘  └─────────────┘
+      │                 │                 │
+      └─────────────────┼─────────────────┘
+                        │
+                        ▼
+              ┌──────────────────────┐
+              │   CloudWatch Logs    │
+              │  • VPC Flow Logs     │
+              │  • CloudTrail        │
+              │  • Application Logs  │
+              │  • RDS Logs          │
+              └──────────┬───────────┘
                          │
-                    ┌────▼────┐
-                    │   RDS   │ (DB Subnet)
-                    └─────────┘
-
-All Logs → CloudWatch Logs → AI Analysis (Bedrock)
+                         ▼
+              ┌──────────────────────┐
+              │  AI Analysis Engine  │
+              │  • Log Parsing       │
+              │  • Pattern Analysis  │
+              │  • Correlation       │
+              │  • Bedrock AI        │
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │  Versus Incident     │
+              │  (Alert Gateway)     │
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │  📱 Telegram Bot     │
+              │  Security Alerts     │
+              └──────────────────────┘
 ```
 
-## ✨ Features
-
-### Infrastructure (Terraform)
-- ✅ 3-tier VPC architecture (public, private, db subnets)
-- ✅ Application Load Balancer with path-based routing
-- ✅ Auto Scaling Groups for high availability
-- ✅ RDS PostgreSQL database
-- ✅ VPC Flow Logs for network monitoring
-- ✅ CloudTrail for API audit logging
-- ✅ CloudWatch Logs centralization
-- ✅ IAM roles with least privilege
-- ✅ Security Groups with defense in depth
-- ✅ VPC Endpoints (SSM, S3) for private connectivity
-
-### Configuration Management (Ansible)
-- ✅ Dynamic inventory from AWS EC2 tags
-- ✅ SSM-based connection (no SSH keys needed)
-- ✅ CloudWatch Agent deployment
-- ✅ Docker containerized applications
-- ✅ Automated application deployment
-- ✅ Idempotent playbooks
-
-### Applications
-- ✅ **Streamlit AI Log Analyzer** - AI-powered log analysis with AWS Bedrock
-- ✅ **PHP Web QLSV** - Student management system
-
-### Security & Monitoring
-- ✅ VPC Flow Logs (network traffic analysis)
-- ✅ CloudTrail (AWS API audit trail)
-- ✅ CloudWatch Logs (application logs)
-- ✅ CloudWatch Alarms (security event detection)
-- ✅ Metric filters for suspicious activities
-- ✅ AI-powered root cause analysis
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-```bash
-# Required tools
-- AWS CLI configured
+
+- AWS Account với Bedrock access
 - Terraform >= 1.5
-- Ansible >= 2.9
-- Python 3.8+
-- Session Manager Plugin
+- Ansible >= 2.14
+- Python >= 3.9
+- Telegram Bot Token
+
+### 1. Clone Repository
+
+```bash
+git clone <your-repo-url>
+cd AI_Log_Analysis-Project-1
 ```
 
-### 1. Deploy Infrastructure
+### 2. Setup Infrastructure
+
 ```bash
 cd environments/dev
 terraform init
 terraform apply
 ```
 
-### 2. Deploy Applications
+### 3. Configure Telegram
+
+```bash
+# Tạo bot với @BotFather
+# Lấy bot token và chat ID
+export TELEGRAM_BOT_TOKEN="your-bot-token"
+export TELEGRAM_CHAT_ID="your-chat-id"
+```
+
+### 4. Deploy Applications
+
 ```bash
 cd ../../ansible
-ansible-playbook -i inventory/aws_ec2.yml playbooks/site.yml
+ansible-playbook playbooks/site.yml
 ```
 
-### 3. Access Applications
-
-**Web QLSV (via ALB):**
-```bash
-ALB_DNS=$(cd environments/dev && terraform output -raw alb_dns_name)
-echo "http://$ALB_DNS/qlsv"
-```
-
-**Streamlit AI Analyzer (via SSM tunnel):**
-```bash
-INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Role,Values=app" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text)
-
-aws ssm start-session --target $INSTANCE_ID --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["8501"],"localPortNumber":["8888"]}'
-
-# Open: http://localhost:8888
-```
-
-## 🎭 Demo: Attack Detection
-
-### Generate Attack Logs
-```bash
-bash scripts/generate_attack_logs.sh
-# Select: 5 (All attacks)
-```
-
-### Analyze with AI
-1. Open Streamlit: `http://localhost:8888`
-2. Select Log Group: `/aws/ec2/applogs`
-3. Search Term: `Failed password`
-4. Enable AI Enhancement ✅
-5. Click "Analyze Logs"
-
-### Expected Results
-- **SSH Brute Force**: 53 failed login attempts detected
-- **SQL Injection**: Multiple injection patterns identified
-- **Port Scanning**: Systematic port probing detected
-- **Unauthorized API**: Failed authentication attempts
-
-AI provides:
-- Severity assessment
-- Business impact analysis
-- Evidence from logs
-- Root cause inference
-- Immediate containment steps
-- Prevention recommendations
-
-## 📊 Log Sources
-
-| Source | Log Group | Content |
-|--------|-----------|---------|
-| VPC Flow Logs | `/aws/vpc/flowlogs` | Network traffic (ACCEPT/REJECT) |
-| Application Logs | `/aws/ec2/applogs` | System logs, app logs, security events |
-| CloudTrail | `/aws/cloudtrail/logs` | AWS API calls, IAM changes |
-
-## 🔍 Monitoring
-
-### CloudWatch Alarms
-- VPC high rejected connections
-- Unauthorized API calls
-- Root account usage
-- Security group changes
-- IAM policy changes
-
-### Metric Filters
-- Failed SSH attempts
-- SQL injection patterns
-- Port scanning activity
-- Unauthorized access attempts
-
-## 📁 Project Structure
-
-```
-terraform-for-project1/
-├── environments/dev/          # Terraform infrastructure
-│   ├── main.tf               # VPC, networking
-│   ├── compute.tf            # EC2, ASG
-│   ├── alb.tf                # Load balancer
-│   ├── database.tf           # RDS
-│   ├── cloudwatch.tf         # Log groups, Flow Logs
-│   ├── cloudtrail.tf         # CloudTrail setup
-│   ├── iam.tf                # IAM roles & policies
-│   └── security_groups.tf    # Security groups
-├── ansible/                   # Configuration management
-│   ├── inventory/            # Dynamic inventory
-│   ├── playbooks/            # Ansible playbooks
-│   ├── roles/                # Reusable roles
-│   └── templates/            # Config templates
-├── AI_Log_Analysis-Project-1/ # Streamlit app
-│   └── bedrock-log-analyzer-ui/
-│       ├── streamlit_app.py  # Main UI
-│       ├── src/              # Analysis modules
-│       └── requirements.txt
-├── Web-Project-1/            # PHP web app
-│   ├── api/                  # REST API
-│   ├── admin/                # Admin panel
-│   └── student/              # Student portal
-└── scripts/                  # Utility scripts
-    └── generate_attack_logs.sh
-```
-
-## 📚 Documentation
-
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Complete deployment guide
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick command reference
-- **[PROJECT_AUDIT_REPORT.md](PROJECT_AUDIT_REPORT.md)** - Project status audit
-- **[CLOUDWATCH_SETUP_COMPLETE.md](CLOUDWATCH_SETUP_COMPLETE.md)** - CloudWatch setup details
-- **[HOW_TO_ACCESS_APPS.md](HOW_TO_ACCESS_APPS.md)** - Application access guide
-
-## 💰 Cost Estimate
-
-**Dev Environment (~$50-70/month):**
-- EC2 (4x t3.micro): ~$30/month
-- RDS (db.t3.micro): ~$15/month
-- ALB: ~$20/month
-- CloudWatch Logs: ~$5/month
-- Bedrock API: ~$0.01-0.05 per analysis
-
-**Production optimizations:**
-- Use Reserved Instances (save 40-60%)
-- Enable NAT Gateway only when needed
-- Adjust log retention periods
-- Use S3 for long-term log storage
-
-## 🔒 Security Best Practices
-
-✅ **Implemented:**
-- Private subnets for applications
-- SSM for secure access (no SSH keys)
-- IAM roles with least privilege
-- Security groups with minimal exposure
-- VPC Flow Logs for network monitoring
-- CloudTrail for audit logging
-- Encrypted RDS storage
-- S3 bucket encryption
-
-⚠️ **Recommended for Production:**
-- Enable AWS GuardDuty
-- Add AWS WAF to ALB
-- Enable MFA for IAM users
-- Implement AWS Config rules
-- Add AWS Security Hub
-- Enable S3 versioning
-- Implement backup strategy
-
-## 🧹 Cleanup
+### 5. Run Attack Simulation
 
 ```bash
-# Destroy infrastructure
-cd environments/dev
-terraform destroy
+cd ../AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui
 
-# Destroy bootstrap
-cd ../../bootstrap
-terraform destroy
+# Get Web App URL (Layer 1 is public)
+export TARGET_URL="http://$(cd ../../environments/dev && terraform output -raw alb_dns_name):8080/api/login.php"
+
+python simulate_attack.py --target $TARGET_URL --attack-type combined
 ```
 
-## 🤝 Contributing
+### 6. Access Layer 2 via SSM Port Forwarding
 
-This is a demo project for learning purposes. Feel free to:
-- Fork and experiment
-- Submit issues
-- Suggest improvements
-- Share your learnings
+⚠️ **Layer 2 (Log Analyzer) chỉ accessible qua AWS SSM Port Forwarding**
 
-## 📝 License
+```bash
+# Install Session Manager Plugin (one-time)
+curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+sudo dpkg -i session-manager-plugin.deb
 
-This project is for educational purposes.
+# Get instance ID
+export INSTANCE_ID=$(cd environments/dev && terraform output -raw app_instance_id)
 
-## 🙏 Acknowledgments
+# Start port forwarding
+aws ssm start-session \
+  --target $INSTANCE_ID \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["80"],"localPortNumber":["8080"]}'
 
-- AWS for cloud infrastructure
-- Terraform for IaC
-- Ansible for configuration management
-- Anthropic Claude (via AWS Bedrock) for AI analysis
-- Streamlit for rapid UI development
+# Open browser (in new terminal)
+open http://localhost:8080
+```
 
-## 📞 Support
+### 7. Analyze Logs
 
-For issues or questions:
-1. Check documentation in `/docs`
-2. Review CloudWatch Logs
-3. Verify IAM permissions
-4. Check Security Group rules
+1. Open `http://localhost:8080` in browser (via SSM port forwarding)
+2. Configure analysis settings
+3. Click **🚀 Analyze Logs**
+4. Check Telegram for alerts
 
 ---
 
-**Built with ❤️ for DevSecOps learning**
+## 📚 Documentation
 
-🚀 **Ready to deploy!** Follow the [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) to get started.
+- **[Quick Start](docs/QUICK_START.md)** - Truy cập Layer 2 trong 5 phút ⚡
+- **[SSM Access Guide](docs/SSM_ACCESS_GUIDE.md)** - Chi tiết về AWS SSM Port Forwarding 🔒
+- **[System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Sơ đồ kiến trúc chi tiết
+- **[Setup Guide](docs/SETUP_GUIDE.md)** - Hướng dẫn setup từng bước
+- **[Telegram Setup](docs/TELEGRAM_SETUP.md)** - Cấu hình Telegram Bot
+- **[Attack Simulation](AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui/simulate_attack.py)** - Script tấn công demo
+
+---
+
+## 🎭 Demo Scenarios
+
+### Scenario 1: SQL Injection Attack
+
+```bash
+python simulate_attack.py --target $TARGET_URL --attack-type sql --count 10
+```
+
+**AI Detection:**
+- Attack Type: SQL Injection
+- MITRE: T1190 (Exploit Public-Facing Application)
+- Evidence: `' OR '1'='1`, `UNION SELECT` patterns
+- Action: Block IP, sanitize inputs
+
+### Scenario 2: Brute Force Attack
+
+```bash
+python simulate_attack.py --target $TARGET_URL --attack-type brute --count 20
+```
+
+**AI Detection:**
+- Attack Type: Brute Force
+- MITRE: T1110 (Brute Force)
+- Evidence: 20 failed login attempts in 40 seconds
+- Action: Rate limiting, account lockout
+
+### Scenario 3: Multi-Stage Attack
+
+```bash
+python simulate_attack.py --target $TARGET_URL --attack-type combined
+```
+
+**AI Detection:**
+- Attack Type: Multi-stage (Recon → Exploit → Credential Access)
+- MITRE: T1046 (Network Service Scanning), T1190, T1110
+- Evidence: Port scan → SQL injection → Brute force
+- Action: Block IP, review security posture
+
+---
+
+## 🔍 Attack Detection Examples
+
+### Example 1: SQL Injection + Brute Force
+
+**Logs Collected:**
+```
+[10:23:45] VPC Flow: 203.0.113.42 → 10.0.11.5:8080 ACCEPT
+[10:23:47] App Log: SQL error "UNION SELECT" from 203.0.113.42
+[10:24:00] App Log: Failed login attempt #1 from 203.0.113.42
+[10:24:02] App Log: Failed login attempt #2 from 203.0.113.42
+...
+[10:25:30] VPC Flow: 203.0.113.42 → 10.0.11.5:8080 REJECT (blocked)
+```
+
+**AI Analysis:**
+```
+🚨 SECURITY ALERT 🚨
+
+Attack Detected: Multi-stage SQL Injection + Brute Force Attack
+Severity: HIGH | Confidence: 95%
+Attacker IP: 203.0.113.42
+
+🎯 Affected Components:
+• Web Application (High impact)
+• Database (Medium impact)
+
+🔍 Root Cause:
+Unvalidated user input in login form allows SQL injection.
+Attacker exploited this to bypass authentication and attempted
+brute force on multiple accounts.
+
+⚡ Immediate Actions:
+[P1] Block attacker IP in Security Group
+→ aws ec2 revoke-security-group-ingress --group-id sg-xxx --cidr 203.0.113.42/32
+
+[P1] Disable affected user accounts
+→ mysql -e "UPDATE users SET status='locked' WHERE last_login_ip='203.0.113.42'"
+
+🛡️ MITRE ATT&CK: T1190, T1110
+
+⏰ Detected: 2026-04-24 10:30:15
+```
+
+---
+
+## 💰 Cost Estimation
+
+**Monthly costs (ap-southeast-1):**
+- EC2 (2x t3.micro): ~$15
+- RDS (db.t3.micro): ~$15
+- ALB: ~$20
+- CloudWatch Logs (5GB): ~$3
+- VPC Flow Logs: ~$5
+- Bedrock (Claude 3.5 Sonnet): ~$0.50/analysis
+- **Total: ~$60/month**
+
+**Cost optimization:**
+- Disable NAT Gateway (saves $32/month)
+- Use t3.micro instead of t3.small
+- Set CloudWatch log retention to 7 days
+- Stop instances when not in use
+
+---
+
+## 🔒 Security Features
+
+### Infrastructure Security
+- ✅ 3-tier network isolation
+- ✅ Security groups với least-privilege
+- ✅ Private subnets cho sensitive workloads
+- ✅ **Layer 2 isolated (SSM access only)** ⭐ Zero Trust
+- ✅ No public IPs on app/db instances
+- ✅ SSM Session Manager (no SSH keys)
+
+### Application Security
+- ✅ Docker container isolation
+- ✅ Read-only volumes
+- ✅ Resource limits (CPU, memory)
+- ✅ Non-root user execution
+
+### Monitoring & Detection
+- ✅ VPC Flow Logs (network monitoring)
+- ✅ CloudTrail (API audit)
+- ✅ Application logs (error tracking)
+- ✅ Real-time AI analysis
+- ✅ MITRE ATT&CK mapping
+
+---
+
+## 🧪 Testing
+
+### Unit Tests
+
+```bash
+cd AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui
+pytest tests/
+```
+
+### Integration Tests
+
+```bash
+# Test CloudWatch connectivity
+python -c "from cloudwatch_client import CloudWatchClient; print(CloudWatchClient().get_logs('/aws/vpc/flowlogs'))"
+
+# Test Bedrock API
+python -c "from bedrock_enhancer import BedrockEnhancer; print(BedrockEnhancer().is_available())"
+
+# Test Telegram integration
+python -c "from telegram_notifier import TelegramNotifier; TelegramNotifier().send_test_alert()"
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Issue: Cannot access Layer 2 UI
+
+```bash
+# Layer 2 is PRIVATE - must use SSM Port Forwarding
+aws ssm start-session \
+  --target $(terraform output -raw app_instance_id) \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["80"],"localPortNumber":["8080"]}'
+
+# Then access: http://localhost:8080
+# See: docs/SSM_ACCESS_GUIDE.md
+```
+
+### Issue: Logs not appearing in CloudWatch
+
+```bash
+# Check CloudWatch Agent status
+sudo systemctl status amazon-cloudwatch-agent
+
+# Restart agent
+sudo systemctl restart amazon-cloudwatch-agent
+```
+
+### Issue: Telegram alerts not sending
+
+```bash
+# Check Versus Incident logs
+docker logs versus-incident
+
+# Test Telegram Bot manually
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  -d "chat_id=${TELEGRAM_CHAT_ID}" \
+  -d "text=Test"
+```
+
+### Issue: Bedrock API errors
+
+```bash
+# Check model access
+aws bedrock list-foundation-models --region ap-southeast-1
+
+# Enable model access in AWS Console:
+# Bedrock → Model access → Request model access
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **AWS Bedrock** - AI-powered analysis
+- **Versus Incident** - Multi-channel alerting ([GitHub](https://github.com/VersusControl/versus-incident))
+- **MITRE ATT&CK** - Attack classification framework
+- **Streamlit** - Interactive UI framework
+
+---
+
+## 📞 Contact
+
+- **Author:** Your Name
+- **Email:** your.email@example.com
+- **Project Link:** [https://github.com/yourusername/ai-log-analysis](https://github.com/yourusername/ai-log-analysis)
+
+---
+
+## 🗺️ Roadmap
+
+- [x] Infrastructure automation (Terraform)
+- [x] Configuration management (Ansible)
+- [x] Multi-source log collection
+- [x] AI-powered analysis (Bedrock)
+- [x] Cross-source correlation
+- [x] Telegram alerting
+- [ ] GuardDuty integration
+- [ ] Slack alerting
+- [ ] Email alerting
+- [ ] Custom detection rules UI
+- [ ] Historical attack analysis
+- [ ] Automated remediation
+- [ ] Compliance reporting (PCI-DSS, HIPAA)
+
+---
+
+**Built with ❤️ for Security Engineers**
+
+**Version:** 1.0  
+**Last Updated:** 2026-04-24

@@ -57,7 +57,6 @@ resource "aws_security_group" "app" {
   tags = { Name = "${local.name_prefix}-sg-layer-2" }
 }
 
-
 # ── SSM ENDPOINTS SG (Cổng dùng chung cho tất cả các máy kết nối SSM) ──
 resource "aws_security_group" "ssm_endpoints" {
   name        = "${local.name_prefix}-sg-ssm-endpoints"

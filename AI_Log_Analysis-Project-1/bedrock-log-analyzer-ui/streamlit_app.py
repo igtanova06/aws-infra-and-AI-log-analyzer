@@ -19,9 +19,10 @@ from log_parser import LogParser
 from pattern_analyzer import PatternAnalyzer
 from rule_detector import RuleBasedDetector
 from bedrock_enhancer import BedrockEnhancer
-from log_preprocessor import LogPreprocessor
-from models import Metadata, AIInfo, AnalysisResult
+from log_preprocessor import LogPreprocessor, build_unified_context, build_deep_dive_context
+from models import Metadata, AIInfo, AnalysisResult, GlobalRCA, DeepDiveResult
 from advanced_correlator import AdvancedCorrelator, AdvancedCorrelatedEvent
+from telegram_notifier import TelegramNotifier
 
 # Page config
 st.set_page_config(
@@ -65,6 +66,14 @@ if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
 if 'advanced_correlated_events' not in st.session_state:
     st.session_state.advanced_correlated_events = []
+if 'global_rca' not in st.session_state:
+    st.session_state.global_rca = None
+if 'deep_dive_results' not in st.session_state:
+    st.session_state.deep_dive_results = {}
+if 'per_source_entries' not in st.session_state:
+    st.session_state.per_source_entries = {}
+if 'analysis_data' not in st.session_state:
+    st.session_state.analysis_data = None
 
 # ============================================================
 # SIDEBAR — Configuration
@@ -247,19 +256,27 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                             st.write(f"  {i}. **{preview}** (Count: {pattern.count}, Source: {pattern.component})")
                     
                     # ============================================================
-                    # Step 4a: Rule-based Issue Detection (always runs)
+                    # Step 4a: Smart Rule-based Detection (skip when AI enabled)
                     # ============================================================
-                    st.info("🎯 Detecting issues...")
-                    detector = RuleBasedDetector()
-                    issues = detector.detect_issues(analysis)
-                    solutions = detector.generate_basic_solutions(issues)
-                    st.success(f"✅ Detected {len(issues)} rule-based issues")
+                    # Smart decision: Skip Layer 1 when AI enabled and Bedrock available
+                    should_skip_layer1 = enable_ai and BedrockEnhancer(region=aws_region, model=bedrock_model).is_available()
+                    
+                    issues = []
+                    solutions = []
+                    
+                    if should_skip_layer1:
+                        st.info("⏭️ Skipping rule-based detection (AI enabled, will use comprehensive analysis)")
+                    else:
+                        st.info("🎯 Running rule-based detection...")
+                        detector = RuleBasedDetector()
+                        issues = detector.detect_issues(analysis)
+                        solutions = detector.generate_basic_solutions(issues)
+                        st.success(f"✅ Detected {len(issues)} rule-based issues")
                     
                     # ============================================================
                     # Step 4b: Cross-source Correlation (auto when 2+ sources)
                     # ============================================================
                     correlated_events = []
-                    correlation_metadata = None
                     
                     if len(all_source_logs) >= 2:
                         st.divider()
@@ -276,109 +293,101 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         
                         st.session_state.advanced_correlated_events = correlated_events
                         st.success(f"✅ Found {len(correlated_events)} correlated attack patterns")
-                        
-                        if correlated_events:
-                            st.info("🎯 Top Correlated Events:")
-                            for i, event in enumerate(correlated_events[:5], 1):
-                                st.write(f"  {i}. {event.attack_name} (Confidence: {event.confidence_score:.1f}%, Sources: {len(event.sources)})")
-                            
-                            # Add correlated events as solutions
-                            from models import Solution, IssueType
-                            for event in correlated_events:
-                                solution = Solution(
-                                    problem=f"🚨 [CORRELATED ATTACK] {event.attack_name}",
-                                    issue_type=IssueType.SECURITY,
-                                    affected_components=event.sources,
-                                    solution=event.ai_recommendation,
-                                    ai_enhanced=False
-                                )
-                                solutions.insert(0, solution)
-                            
-                            # Build correlation metadata for AI
-                            correlation_metadata = {
-                                'correlated_events': correlated_events,
-                                'correlation_keys_used': ['trace_id', 'request_id', 'session_id', 'instance_id', 'ip'],
-                                'timeline_sequences': [
-                                    {
-                                        'attack_name': e.attack_name,
-                                        'first_event': e.timeline[0].timestamp.strftime('%Y-%m-%d %H:%M:%S') if e.timeline and hasattr(e.timeline[0].timestamp, 'strftime') else str(e.timeline[0].timestamp) if e.timeline else None,
-                                        'last_event': e.timeline[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') if e.timeline and hasattr(e.timeline[-1].timestamp, 'strftime') else str(e.timeline[-1].timestamp) if e.timeline else None,
-                                        'event_count': len(e.timeline),
-                                        'sources': e.sources
-                                    }
-                                    for e in correlated_events
-                                ],
-                                'matched_rules': [e.matched_rules for e in correlated_events if e.matched_rules],
-                                'confidence_scores': [e.confidence_score for e in correlated_events]
-                            }
                     else:
                         st.session_state.advanced_correlated_events = []
                     
                     # ============================================================
-                    # Step 5: AI Preprocessing
+                    # Step 5: Build Unified Context (Event Abstraction Layer)
                     # ============================================================
-                    st.info("🧠 Building AI context...")
-                    preprocessor = LogPreprocessor()
+                    st.info("⚡ Building unified context with event signals...")
                     
-                    if len(all_source_logs) > 1:
-                        log_label = f"Multi-Source ({len(selected_log_groups)} sources: {', '.join(selected_log_groups)})"
-                    else:
-                        log_label = selected_log_groups[0]
+                    # Group entries by source for per-source analysis
+                    per_source_entries = {}
+                    for log_group, raw_logs in all_source_logs.items():
+                        per_source_entries[log_group] = [
+                            e for e in all_parsed_entries if e.component == log_group
+                        ]
+                    st.session_state.per_source_entries = per_source_entries
+                    st.session_state.analysis_data = analysis
                     
-                    ai_context = preprocessor.prepare_ai_context(
-                        entries=all_parsed_entries,
+                    time_range_str = f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}"
+                    
+                    unified_ctx = build_unified_context(
+                        per_source_entries=per_source_entries,
                         analysis=analysis,
-                        log_group_name=log_label,
-                        search_term=effective_search or "Auto-scan (no search term)",
-                        time_range_str=f"{start_dt.strftime('%H:%M %d/%m')} to {end_dt.strftime('%H:%M %d/%m')}",
-                        correlation_metadata=correlation_metadata
+                        correlated_events=correlated_events,
+                        time_range_str=time_range_str,
                     )
+                    
                     st.success(
-                        f"✅ AI context ready — source: {ai_context.source_type}, "
-                        f"high-relevance logs: {ai_context.total_logs_after_scoring}, "
-                        f"suspicious IPs: {len(ai_context.suspicious_ips)}"
+                        f"✅ Unified context ready — {len(unified_ctx.get('signals', []))} event signals, "
+                        f"{len(unified_ctx.get('suspicious_ips', []))} suspicious IPs, "
+                        f"{unified_ctx.get('correlation_count', 0)} correlated attacks"
                     )
                     
                     # ============================================================
-                    # Step 6: AI Enhancement
+                    # Step 6: Global RCA (1 AI call for full picture)
                     # ============================================================
-                    enhanced_solutions = solutions
                     ai_info = None
                     
-                    if enable_ai and solutions:
-                        st.info("🤖 Enhancing with AI...")
+                    if enable_ai:
+                        st.info("🤖 Running Global Root Cause Analysis (1 comprehensive AI call)...")
                         enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
                         
-                        # Limit to top 5 issues to prevent AI token limit truncation
-                        # (Correlated events are already at the front)
-                        solutions_to_enhance = solutions[:5]
-                        
                         if enhancer.is_available():
-                            enhanced_solutions, usage_stats = enhancer.enhance_solutions(
-                                solutions_to_enhance, ai_context=ai_context
-                            )
-                            
-                            if "error" in usage_stats:
-                                st.error(f"❌ {usage_stats['error']}")
+                            try:
+                                global_rca, usage_stats = enhancer.generate_global_rca(unified_ctx)
+                                st.session_state.global_rca = global_rca
+                                
+                                if usage_stats.get("error"):
+                                    st.error(f"❌ {usage_stats['error']}")
+                                    ai_info = AIInfo(ai_enhancement_used=False)
+                                    
+                                    # Fallback to Layer 1 if AI failed and we skipped it earlier
+                                    if not issues:
+                                        st.warning("🔄 Falling back to rule-based detection...")
+                                        detector = RuleBasedDetector()
+                                        issues = detector.detect_issues(analysis)
+                                        solutions = detector.generate_basic_solutions(issues)
+                                        st.success(f"✅ Fallback complete: {len(issues)} issues detected")
+                                else:
+                                    ai_info = AIInfo(
+                                        ai_enhancement_used=True,
+                                        bedrock_model_used=usage_stats.get("bedrock_model_used"),
+                                        total_tokens_used=usage_stats.get("total_tokens_used"),
+                                        estimated_total_cost=usage_stats.get("estimated_total_cost"),
+                                        api_calls_made=usage_stats.get("api_calls_made")
+                                    )
+                                    st.success(f"✅ Global RCA complete (Cost: ${ai_info.estimated_total_cost:.4f}, 1 API call)")
+                            except Exception as e:
+                                st.error(f"❌ AI analysis failed: {str(e)}")
                                 ai_info = AIInfo(ai_enhancement_used=False)
-                            else:
-                                ai_info = AIInfo(
-                                    ai_enhancement_used=usage_stats.get("ai_enhancement_used", False),
-                                    bedrock_model_used=usage_stats.get("bedrock_model_used"),
-                                    total_tokens_used=usage_stats.get("total_tokens_used"),
-                                    estimated_total_cost=usage_stats.get("estimated_total_cost"),
-                                    api_calls_made=usage_stats.get("api_calls_made")
-                                )
-                                st.success(f"✅ AI enhancement completed (Cost: ${ai_info.estimated_total_cost:.4f})")
+                                
+                                # Fallback to Layer 1 if AI failed and we skipped it earlier
+                                if not issues:
+                                    st.warning("🔄 Falling back to rule-based detection...")
+                                    detector = RuleBasedDetector()
+                                    issues = detector.detect_issues(analysis)
+                                    solutions = detector.generate_basic_solutions(issues)
+                                    st.success(f"✅ Fallback complete: {len(issues)} issues detected")
                         else:
                             st.warning("⚠️ AWS Bedrock not available")
                             ai_info = AIInfo(ai_enhancement_used=False)
+                            
+                            # Fallback to Layer 1 if Bedrock not available and we skipped it earlier
+                            if not issues:
+                                st.warning("🔄 Falling back to rule-based detection...")
+                                detector = RuleBasedDetector()
+                                issues = detector.detect_issues(analysis)
+                                solutions = detector.generate_basic_solutions(issues)
+                                st.success(f"✅ Fallback complete: {len(issues)} issues detected")
                     else:
                         ai_info = AIInfo(ai_enhancement_used=False)
                     
                     # ============================================================
                     # Step 7: Create Results
                     # ============================================================
+                    # Generate basic solutions for backward compat
                     metadata = Metadata(
                         timestamp=datetime.now().isoformat(),
                         search_term=effective_search or "Auto-scan (all logs)",
@@ -391,12 +400,35 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
                         metadata=metadata,
                         matches=all_parsed_entries,
                         analysis=analysis,
-                        solutions=enhanced_solutions,
+                        solutions=solutions,
                         ai_info=ai_info
                     )
                     
                     st.session_state.analysis_result = results
                     st.success("✅ Analysis complete!")
+                    
+                    # ============================================================
+                    # Step 8: Send Telegram Alert (if enabled and attack detected)
+                    # ============================================================
+                    if global_rca and correlated_events:
+                        st.info("📱 Sending Telegram alert...")
+                        try:
+                            notifier = TelegramNotifier()
+                            alert_metadata = {
+                                "time_range": time_range_str,
+                                "total_logs": len(all_parsed_entries),
+                            }
+                            alert_sent = notifier.send_attack_alert(
+                                global_rca=global_rca.__dict__ if hasattr(global_rca, '__dict__') else global_rca,
+                                correlated_events=correlated_events,
+                                analysis_metadata=alert_metadata
+                            )
+                            if alert_sent:
+                                st.success("✅ Telegram alert sent successfully!")
+                            else:
+                                st.warning("⚠️ Telegram alert not sent (check configuration)")
+                        except Exception as telegram_error:
+                            st.warning(f"⚠️ Telegram alert failed: {telegram_error}")
 
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
@@ -409,10 +441,12 @@ if st.sidebar.button("🚀 Analyze Logs", use_container_width=True, type="primar
 # RESULTS TABS
 # ============================================================
 has_correlation = bool(st.session_state.advanced_correlated_events)
+has_global_rca = st.session_state.global_rca is not None
+
 if has_correlation:
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "🔗 Correlation", "📊 Analysis", "🔧 Solutions"])
+    tab1, tab2, tab3 = st.tabs(["📋 Global Report", "🔗 Correlation", "📊 Analysis & Deep Dive"])
 else:
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "📊 Analysis", "🔧 Solutions", "ℹ️ Info"])
+    tab1, tab2, tab3 = st.tabs(["📋 Global Report", "📊 Analysis & Deep Dive", "ℹ️ Info"])
 
 if st.session_state.analysis_result is None:
     st.info("👈 Configure settings and click 'Analyze Logs' in the sidebar to see results")
@@ -420,19 +454,19 @@ else:
     result = st.session_state.analysis_result
     
     with tab1:
-        st.subheader("Analysis Summary")
+        st.subheader("Global Report")
         
         # Summary metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Logs", result.metadata.total_matches)
         with col2:
-            st.metric("Issues Found", len(result.solutions))
+            st.metric("Sources", result.metadata.total_files_searched)
         with col3:
             if result.ai_info and result.ai_info.ai_enhancement_used:
-                st.metric("AI Enhanced", "✅ Yes")
+                st.metric("AI Calls", f"{result.ai_info.api_calls_made or 1}")
             else:
-                st.metric("AI Enhanced", "❌ No")
+                st.metric("AI", "Off")
         with col4:
             if result.ai_info and result.ai_info.estimated_total_cost:
                 st.metric("Cost", f"${result.ai_info.estimated_total_cost:.4f}")
@@ -441,67 +475,182 @@ else:
         
         st.divider()
         
-        # Correlation summary (when available)
-        if has_correlation:
-            st.subheader("🎯 Analysis Summary")
-            st.info(f"**Sources Analyzed:** {result.metadata.log_directory}")
-            st.info(f"**Search Term:** {result.metadata.search_term}")
-            
-            if st.session_state.advanced_correlated_events:
-                st.metric("Correlated Attack Patterns", len(st.session_state.advanced_correlated_events))
-                
-                # Top attacks by confidence
-                st.markdown("**Top Attack Patterns:**")
-                for i, event in enumerate(st.session_state.advanced_correlated_events[:5], 1):
-                    st.write(f"{i}. **{event.attack_name}** (Confidence: {event.confidence_score:.1f}%, Sources: {len(event.sources)})")
-            
-            st.divider()
+        # === GLOBAL RCA CONTENT ===
+        global_rca = st.session_state.global_rca
         
-        # Component Error Summary Table
-        st.subheader("🎯 Component Error Summary")
-        if result.analysis.components:
-            total_errors = sum(result.analysis.components.values())
-            table_data = []
-            for comp, count in result.analysis.components.items():
-                ratio = f"{(count / total_errors) * 100:.1f}%" if total_errors > 0 else "0%"
-                table_data.append({
-                    "Nguồn Log (Component)": comp,
-                    "Số lượng Lỗi": count,
-                    "Tỉ trọng (%)": ratio
-                })
+        if global_rca and (global_rca.incident_story or global_rca.attack_narrative):
+            # --- Incident Story (TL;DR) ---
+            if global_rca.incident_story:
+                st.subheader("🚨 Incident Story (TL;DR)")
+                for step in global_rca.incident_story:
+                    st.markdown(f"- {step}")
+                st.divider()
             
-            st.dataframe(table_data, use_container_width=True, hide_index=True)
+            # --- Threat Assessment ---
+            if global_rca.threat_assessment:
+                st.subheader("🎯 Threat Assessment")
+                ta = global_rca.threat_assessment
+                
+                # Row 1: Severity, Confidence, Scope
+                ta_col1, ta_col2 = st.columns(2)
+                with ta_col1:
+                    severity = ta.get('severity', 'Unknown')
+                    sev_icon = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🟢"}.get(severity, "⚪")
+                    st.metric("Severity", f"{sev_icon} {severity}")
+                with ta_col2:
+                    confidence = ta.get('confidence', 0)
+                    conf_pct = f"{confidence * 100:.0f}%" if isinstance(confidence, float) else str(confidence)
+                    st.metric("Confidence", conf_pct)
+                
+                # Row 2: Scope (full width for longer text)
+                scope = ta.get('scope', 'N/A')
+                if scope and scope != 'N/A':
+                    st.markdown(f"**Scope:** {scope}")
+                
+                # Reasoning
+                if ta.get('reasoning'):
+                    st.info(f"**Reasoning:** {ta['reasoning']}")
+                st.divider()
+            
+            # --- Attack Narrative ---
+            if global_rca.attack_narrative:
+                st.subheader("📖 Attack Narrative")
+                st.warning(global_rca.attack_narrative)
+                st.divider()
+            
+            # --- Affected Components ---
+            if global_rca.affected_components:
+                st.subheader("🏗️ Affected Components")
+                for comp in global_rca.affected_components:
+                    impact = comp.get('impact_level', 'Unknown')
+                    impact_icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(impact, "⚪")
+                    with st.expander(f"{impact_icon} {comp.get('component', '?')} — Impact: {impact}"):
+                        st.write(f"**Evidence:** {comp.get('evidence', 'N/A')}")
+                st.divider()
+            
+            # --- Root Cause ---
+            if global_rca.root_cause:
+                st.subheader("🔍 Root Cause")
+                st.error(global_rca.root_cause)
+                
+                # Display 5 Why Analysis if available in raw_ai_response
+                if global_rca.raw_ai_response and 'root_cause_analysis' in global_rca.raw_ai_response:
+                    rca_data = global_rca.raw_ai_response['root_cause_analysis']
+                    
+                    with st.expander("📊 5 Why Analysis (Detailed)", expanded=True):
+                        st.markdown("**Digging deeper to find the TRUE root cause:**")
+                        
+                        # Display each Why question with evidence
+                        for i in range(1, 6):
+                            why_key = f"why_{i}"
+                            if why_key in rca_data:
+                                why_item = rca_data[why_key]
+                                question = why_item.get('question', f'Why #{i}?')
+                                answer = why_item.get('answer', 'N/A')
+                                evidence = why_item.get('evidence', '')
+                                
+                                # Color coding: deeper = more important
+                                if i <= 2:
+                                    st.info(f"**WHY #{i}:** {question}\n\n→ {answer}")
+                                    if evidence:
+                                        st.caption(f"📋 Evidence: {evidence}")
+                                elif i <= 4:
+                                    st.warning(f"**WHY #{i}:** {question}\n\n→ {answer}")
+                                    if evidence:
+                                        st.caption(f"📋 Evidence: {evidence}")
+                                else:
+                                    st.error(f"**WHY #{i}:** {question}\n\n→ ⭐ **ROOT CAUSE:** {answer}")
+                                    if evidence:
+                                        st.caption(f"📋 Evidence: {evidence}")
+                        
+                        # Root cause summary
+                        if 'root_cause_summary' in rca_data:
+                            st.divider()
+                            st.success(f"**🎯 Root Cause Summary:** {rca_data['root_cause_summary']}")
+                
+                # Display Control Gaps if available
+                if global_rca.raw_ai_response and 'control_gaps' in global_rca.raw_ai_response:
+                    with st.expander("🔒 Control Gaps Identified", expanded=True):
+                        st.markdown("**Security controls that are missing or insufficient:**")
+                        
+                        control_gaps = global_rca.raw_ai_response['control_gaps']
+                        
+                        # Critical gaps
+                        if 'critical' in control_gaps and control_gaps['critical']:
+                            st.markdown("### 🔴 Critical Gaps")
+                            for gap in control_gaps['critical']:
+                                st.error(f"**{gap.get('control', 'Unknown')}**")
+                                st.write(f"- **Expected:** {gap.get('expected', 'N/A')}")
+                                st.write(f"- **Actual:** {gap.get('actual', 'N/A')}")
+                                st.write(f"- **Impact:** {gap.get('impact', 'N/A')}")
+                                if gap.get('fix'):
+                                    st.code(gap['fix'], language='bash')
+                        
+                        # Medium gaps
+                        if 'medium' in control_gaps and control_gaps['medium']:
+                            st.markdown("### 🟡 Medium Gaps")
+                            for gap in control_gaps['medium']:
+                                st.warning(f"**{gap.get('control', 'Unknown')}**")
+                                st.write(f"- **Expected:** {gap.get('expected', 'N/A')}")
+                                st.write(f"- **Actual:** {gap.get('actual', 'N/A')}")
+                                st.write(f"- **Impact:** {gap.get('impact', 'N/A')}")
+                        
+                        # Low gaps
+                        if 'low' in control_gaps and control_gaps['low']:
+                            st.markdown("### 🟢 Low Priority Gaps")
+                            for gap in control_gaps['low']:
+                                st.info(f"**{gap.get('control', 'Unknown')}** - {gap.get('expected', 'N/A')}")
+                
+                st.divider()
+            
+            # --- MITRE Mapping ---
+            if global_rca.mitre_mapping:
+                st.subheader("🗺️ MITRE ATT&CK Mapping")
+                mitre_col1, mitre_col2 = st.columns(2)
+                with mitre_col1:
+                    st.markdown("**Tactics:**")
+                    for t in global_rca.mitre_mapping.get('tactics', []):
+                        st.markdown(f"- {t}")
+                with mitre_col2:
+                    st.markdown("**Techniques:**")
+                    for t in global_rca.mitre_mapping.get('techniques', []):
+                        st.markdown(f"- {t}")
+                st.divider()
+            
+            # --- Immediate Actions ---
+            if global_rca.immediate_actions:
+                st.subheader("🔥 Immediate Actions")
+                for action in global_rca.immediate_actions:
+                    priority = action.get('priority', 'P2')
+                    st.warning(f"**[{priority}]** {action.get('action', 'N/A')}")
+                    if action.get('command'):
+                        st.code(action['command'], language='bash')
+                st.divider()
         else:
-            st.info("Chưa có dữ liệu Component nào được tìm thấy.")
+            # Fallback if no Global RCA
+            st.info("Global RCA not available. Enable AI Enhancement and re-run analysis.")
             
+            # Show basic component summary
+            st.subheader("🎯 Component Error Summary")
+            if result.analysis.components:
+                total_errors = sum(result.analysis.components.values())
+                table_data = []
+                for comp, count in result.analysis.components.items():
+                    ratio = f"{(count / total_errors) * 100:.1f}%" if total_errors > 0 else "0%"
+                    table_data.append({"Component": comp, "Errors": count, "Ratio": ratio})
+                st.dataframe(table_data, use_container_width=True, hide_index=True)
+        
         st.divider()
         
-        # Export results
-        st.subheader("📥 Export Results")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            json_str = result.to_json()
-            st.download_button(
-                label="📄 Download JSON",
-                data=json_str,
-                file_name=f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
-        
-        with col2:
-            # CSV export
-            csv_data = "Problem,Issue Type,Components,AI Enhanced,Solution\n"
-            for sol in result.solutions:
-                safe_solution = str(sol.solution).replace('"', '""')
-                csv_data += f'"{sol.problem}","{sol.issue_type.value}","{", ".join(sol.affected_components)}",{sol.ai_enhanced},"{safe_solution[:100]}..."\n'
-            
-            st.download_button(
-                label="📊 Download CSV",
-                data=csv_data,
-                file_name=f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
+        # Export
+        st.subheader("📥 Export")
+        json_str = result.to_json()
+        st.download_button(
+            label="📄 Download JSON",
+            data=json_str,
+            file_name=f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
 
     # Correlation Tab (auto when correlation data exists)
     if has_correlation:
@@ -563,26 +712,21 @@ else:
                             for ev_item in event.evidence[:5]:
                                 st.code(ev_item, language='text')
         
-        # Analysis tab becomes tab3
-        analysis_tab = tab3
-    else:
-        # No correlation, tab2 is analysis
-        analysis_tab = tab2
+        # Analysis & Deep Dive tab
+        analysis_tab = tab3 if has_correlation else tab2
 
     with analysis_tab:
-        st.subheader("Detailed Analysis")
+        st.subheader("Analysis & Deep Dive")
         
-        # Severity distribution
+        # Severity & Component charts
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.subheader("📊 Severity Distribution")
+            st.markdown("**Severity Distribution**")
             severity_data = result.analysis.severity_distribution
             if severity_data:
                 st.bar_chart(severity_data)
-        
         with col2:
-            st.subheader("🏗️ Component Distribution")
+            st.markdown("**Component Distribution**")
             component_data = result.analysis.components
             if component_data:
                 st.bar_chart(component_data)
@@ -599,149 +743,81 @@ else:
                     st.write(f"**Pattern:** {pattern.pattern}")
         else:
             st.info("No error patterns found")
-
-    solutions_tab = tab4 if has_correlation else tab3
-    with solutions_tab:
-        st.subheader("Suggested Solutions")
-        if result.solutions:
-            for i, solution in enumerate(result.solutions, 1):
-                # If we have structural JSON from the new Bedrock prompt, render it layered
-                if solution.structured_solution:
-                    s_data = solution.structured_solution
-                    attack_class = s_data.get("attack_classification", {})
-                    summary = s_data.get("summary", {})
-                    investigation = s_data.get("investigation", {})
-                    action_plan = s_data.get("action_plan", {})
+        
+        st.divider()
+        
+        # === DEEP DIVE SECTION ===
+        st.subheader("🔬 Deep Dive (Per-Source Analysis)")
+        st.caption("Click a button to run a focused AI analysis on a single log group, enriched with Global RCA context.")
+        
+        per_source = st.session_state.per_source_entries
+        
+        if per_source:
+            for log_group, entries in per_source.items():
+                sev_counts = {}
+                for e in entries:
+                    s = (e.severity or 'UNKNOWN').upper()
+                    sev_counts[s] = sev_counts.get(s, 0) + 1
+                error_count = sev_counts.get('ERROR', 0) + sev_counts.get('CRITICAL', 0)
+                
+                with st.expander(f"📂 {log_group} ({len(entries)} entries, {error_count} errors)"):
+                    # Metrics row
+                    m1, m2, m3 = st.columns(3)
+                    with m1:
+                        st.metric("Entries", len(entries))
+                    with m2:
+                        st.metric("Errors", error_count)
+                    with m3:
+                        rate = f"{(error_count / len(entries) * 100):.1f}%" if entries else "0%"
+                        st.metric("Error Rate", rate)
                     
-                    with st.expander(f"🚨 {solution.problem}", expanded=True):
-                        st.markdown(f'<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
-                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
-                        
-                        # NEW: Attack Classification
-                        if attack_class:
-                            st.markdown("### 🎯 Attack Classification")
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("MITRE Technique", attack_class.get("mitre_technique", "N/A"))
-                            with col2:
-                                st.metric("Threat Actor", attack_class.get("threat_actor_profile", "N/A"))
-                            with col3:
-                                st.metric("Attack Stage", attack_class.get("attack_stage", "N/A"))
-                            st.divider()
-                        
-                        # Tier 1: Summary Box
-                        severity = summary.get("severity", "Unknown")
-                        impact = summary.get("impact", "Unknown")
-                        confidence = summary.get("confidence", "Unknown")
-                        
-                        # Color-code severity
-                        severity_color = {
-                            "Critical": "🔴",
-                            "High": "🟠",
-                            "Medium": "🟡",
-                            "Low": "🟢"
-                        }.get(severity, "⚪")
-                        
-                        st.error(f"{severity_color} **Severity:** {severity} | **Confidence:** {confidence}")
-                        st.info(f"**Business Impact:** {impact}")
-                        
-                        if action_plan.get("immediate_containment"):
-                            st.warning(f"🔥 **Immediate Containment:** {action_plan.get('immediate_containment')}")
-                        if action_plan.get("next_best_command"):
-                            st.code(action_plan.get('next_best_command'), language='bash')
+                    # Deep Dive button
+                    btn_key = f"deep_dive_{log_group}"
+                    if st.button(f"🔬 Deep Dive into {log_group.split('/')[-1]}", key=btn_key):
+                        with st.spinner(f"Running Deep Dive on {log_group}..."):
+                            # Build global RCA summary for context injection
+                            global_rca = st.session_state.global_rca
+                            rca_summary = ""
+                            if global_rca and global_rca.attack_narrative:
+                                rca_summary = (
+                                    f"Attack: {global_rca.attack_narrative}\n"
+                                    f"Root Cause: {global_rca.root_cause}\n"
+                                    f"Severity: {global_rca.threat_assessment.get('severity', 'N/A')}"
+                                )
                             
-                        # Tier 2: Investigation (Evidence & Inference)
-                        st.markdown("### 🔍 Investigation Details")
-                        
-                        # Attack Timeline (NEW)
-                        timeline = investigation.get("attack_timeline", {})
-                        if timeline:
-                            st.markdown("**Attack Timeline:**")
-                            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-                            with tcol1:
-                                st.metric("First Seen", timeline.get("first_seen", "N/A"))
-                            with tcol2:
-                                st.metric("Peak Activity", timeline.get("peak_activity", "N/A"))
-                            with tcol3:
-                                st.metric("Last Seen", timeline.get("last_seen", "N/A"))
-                            with tcol4:
-                                st.metric("Duration", timeline.get("total_duration", "N/A"))
-                        
-                        # Attack Metrics (NEW)
-                        metrics = investigation.get("attack_metrics", {})
-                        if metrics:
-                            st.markdown("**Attack Metrics:**")
-                            mcol1, mcol2, mcol3, mcol4 = st.columns(4)
-                            with mcol1:
-                                st.metric("Total Attempts", metrics.get("total_attempts", "N/A"))
-                            with mcol2:
-                                st.metric("Attempts/Min", metrics.get("attempts_per_minute", "N/A"))
-                            with mcol3:
-                                st.metric("Success Rate", metrics.get("success_rate", "N/A"))
-                            with mcol4:
-                                st.metric("Unique Targets", metrics.get("unique_targets", "N/A"))
-                        
-                        inv_col1, inv_col2 = st.columns(2)
-                        with inv_col1:
-                            st.markdown("**Evidence From Logs**")
-                            for ev in investigation.get("evidence_from_logs", []):
-                                st.markdown(f"- {ev}")
-                        with inv_col2:
-                            st.markdown("**AI Inference**")
-                            for inf in investigation.get("inference", []):
-                                st.markdown(f"- {inf}")
-                                
-                        if investigation.get("why_not_other_causes"):
-                            st.markdown(f"**Alternative Causes Ruled Out:** {investigation.get('why_not_other_causes')}")
+                            dd_ctx = build_deep_dive_context(
+                                log_group=log_group,
+                                entries=entries,
+                                analysis=st.session_state.analysis_data,
+                                global_rca_summary=rca_summary,
+                            )
                             
-                        # Tier 3: Full Remediation
-                        st.markdown("### 🔧 Full Action Plan")
-                        verification = action_plan.get("verification_commands", [])
-                        if verification:
-                            st.markdown("**Verification Commands:**")
-                            for cmd in verification:
-                                st.code(cmd, language='bash')
-                                
-                        fixes = action_plan.get("fix_steps", [])
-                        if fixes:
-                            st.markdown("**Fix Steps:**")
-                            for fx in fixes:
-                                st.markdown(f"{fx}")
-                                
-                        # Prevention Strategy (NEW - structured)
-                        prevention = action_plan.get("prevention", {})
-                        if prevention:
-                            st.markdown("**Prevention Strategy:**")
-                            if isinstance(prevention, dict):
-                                if prevention.get("aws_services"):
-                                    st.markdown("*AWS Services:*")
-                                    for svc in prevention.get("aws_services", []):
-                                        st.markdown(f"  - {svc}")
-                                if prevention.get("configuration"):
-                                    st.markdown("*Configuration Changes:*")
-                                    for cfg in prevention.get("configuration", []):
-                                        st.markdown(f"  - {cfg}")
-                                if prevention.get("monitoring"):
-                                    st.markdown("*Monitoring Improvements:*")
-                                    for mon in prevention.get("monitoring", []):
-                                        st.markdown(f"  - {mon}")
-                            else:
-                                st.markdown(f"{prevention}")
+                            enhancer = BedrockEnhancer(region=aws_region, model=bedrock_model)
+                            dd_result, dd_stats = enhancer.generate_deep_dive(dd_ctx)
+                            st.session_state.deep_dive_results[log_group] = dd_result
+                    
+                    # Show Deep Dive results if available
+                    dd = st.session_state.deep_dive_results.get(log_group)
+                    if dd and dd.component_summary:
+                        st.markdown("---")
+                        st.markdown(f'<span class="ai-badge">✨ AI Deep Dive</span>', unsafe_allow_html=True)
                         
-                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
-                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
-                            
-                else:    
-                    # Legacy flat string rendering for fallback basic solutions
-                    with st.expander(f"{solution.problem}"):
-                        if solution.ai_enhanced:
-                            st.markdown('<span class="ai-badge">✨ AI Enhanced</span>', unsafe_allow_html=True)
+                        st.markdown(f"**Summary:** {dd.component_summary}")
                         
-                        st.write(f"**Components:** {', '.join(solution.affected_components)}")
-                        st.write(f"**Issue Type:** {solution.issue_type.value}")
-                        st.write(f"\n{solution.solution}")
+                        if dd.specific_findings:
+                            st.markdown("**Findings:**")
+                            for finding in dd.specific_findings:
+                                sev = finding.get('severity', 'Medium')
+                                sev_icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢", "Critical": "🔴"}.get(sev, "⚪")
+                                st.markdown(f"- {sev_icon} **{finding.get('finding', 'N/A')}**")
+                                if finding.get('evidence'):
+                                    st.caption(f"  Evidence: {finding['evidence']}")
                         
-                        if hasattr(solution, 'tokens_used') and solution.tokens_used:
-                            st.caption(f"Tokens used: {solution.tokens_used} | Cost: ${solution.estimated_cost:.4f}")
-        else:
-            st.info("No solutions found")
+                        if dd.recommendations:
+                            st.markdown("**Recommendations:**")
+                            for rec in dd.recommendations:
+                                st.markdown(f"- {rec}")
+                        
+                        if dd.tokens_used:
+                            st.caption(f"Tokens: {dd.tokens_used} | Cost: ${dd.cost:.4f}")
+

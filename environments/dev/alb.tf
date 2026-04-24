@@ -23,8 +23,8 @@ resource "aws_lb_listener" "app" {
 		content_type = "text/plain"
 		message_body = "404: Not Found"
 		status_code  = "404"
-  }
-}
+	  }
+	}
 
 }
 
@@ -73,5 +73,3 @@ resource "aws_lb_listener_rule" "qlsv" {
     }
   }
 }
-
-

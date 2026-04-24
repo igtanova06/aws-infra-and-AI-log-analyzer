@@ -1,0 +1,32 @@
+🚨 <b>SECURITY ALERT</b> 🚨
+
+<b>Attack Detected:</b> {{.attack_name}}
+<b>Severity:</b> {{.severity}} | <b>Confidence:</b> {{.confidence}}
+<b>Attacker IP:</b> <code>{{.attacker_ip}}</code>
+
+<b>🎯 Affected Components:</b>
+{{range .affected_components}}• {{.}}
+{{end}}
+
+<b>🔍 Root Cause:</b>
+{{.root_cause}}
+
+<b>⚡ Immediate Actions:</b>
+{{range .immediate_actions}}{{.}}
+
+{{end}}
+
+<b>🛡️ MITRE ATT&CK:</b> {{.mitre_techniques}}
+
+<b>📋 Evidence:</b>
+{{range .evidence}}• {{.}}
+{{end}}
+
+<b>📊 Analysis Summary:</b>
+• Time Range: {{.time_range}}
+• Logs Analyzed: {{.total_logs_analyzed}}
+• Correlated Events: {{.correlation_count}}
+
+<b>⏰ Detected:</b> {{.timestamp}}
+
+<i>🤖 Powered by AI Log Analyzer (AWS Bedrock)</i>

@@ -28,6 +28,8 @@ resource "aws_db_instance" "main" {
   
   allocated_storage      = 20
   storage_type           = "gp2"
+# ← THÊM DÒNG NÀY
+  enabled_cloudwatch_logs_exports = ["error", "slowquery"]
   
   skip_final_snapshot    = true 
   tags = {

@@ -1,12 +1,13 @@
 ---
-- name: Master Playbook
+- name: Master Playbook - EC2 Setup
   hosts: all
   become: yes
-  roles:
-    - ec2_setup
+  tasks:
+    - name: Include ec2_setup role
+      include_role:
+        name: ec2_setup
 
 - import_playbook: install_cloudwatch_agent.yml
 - import_playbook: install_docker.yml
 - import_playbook: deploy_log_analyzer.yml
 - import_playbook: deploy_web_app.yml
-- import_playbook: deploy_versus_incident.yml

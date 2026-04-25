@@ -10,6 +10,7 @@
 !.env.example
 **/*_COMPLETE.md
 **/TELEGRAM_SETUP_COMPLETE.md
+ansible/group_vars/all.yml
 
 # Python
 __pycache__/

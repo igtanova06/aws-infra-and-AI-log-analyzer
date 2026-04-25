@@ -98,9 +98,9 @@ resource "aws_security_group" "db" {
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "db_from_app_postgres" {
+resource "aws_vpc_security_group_ingress_rule" "db_from_web_mysql" {
   security_group_id            = aws_security_group.db.id
-  referenced_security_group_id = aws_security_group.app.id
+  referenced_security_group_id = aws_security_group.web.id
   from_port                    = local.ports.db
   to_port                      = local.ports.db
   ip_protocol                  = "tcp"

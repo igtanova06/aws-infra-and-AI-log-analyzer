@@ -60,6 +60,12 @@
         env:
           PHP_ERROR_LOG: "/var/log/app/php-error.log"
           APP_LOG_FILE: "/var/log/app/application.log"
+          # Lệnh lookup tìm vào SSM lấy password
+          DB_HOST: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/host') }}"
+          DB_USER: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/user') }}"
+          DB_PASS: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/password') }}"
+          DB_NAME: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/name') }}"
+
 
     - name: Configure PHP error logging in container
       shell: |

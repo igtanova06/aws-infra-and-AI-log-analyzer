@@ -16,7 +16,6 @@ resource "aws_lb_listener" "app" {
 	load_balancer_arn = aws_lb.alb.arn
 	port = local.ports.http
 	protocol = "HTTP"
-	# Gợi ý: Sửa lại default action trong alb.tf
 	default_action {
 	type = "fixed-response"
 	fixed_response {
@@ -41,7 +40,7 @@ resource "aws_lb_target_group" "qlsv" {
 		healthy_threshold   = 3
 		interval            = 30
 		matcher             = "200-399"
-		path                = "/" # Web App PHP thường có index ở gốc
+		path                = "/" 
 		port                = "traffic-port"
 		protocol            = "HTTP"
 		timeout             = 10

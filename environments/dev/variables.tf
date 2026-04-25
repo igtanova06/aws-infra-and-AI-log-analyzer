@@ -55,8 +55,4 @@ variable "db_username" {
   default = "admin"
 }
 
-variable "existing_db_identifier" {
-  type        = string
-  description = "Identifier of the existing RDS database to link to"
-  default     = "p1-dev-apse1-db"
-}
+

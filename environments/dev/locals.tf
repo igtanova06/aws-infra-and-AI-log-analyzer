@@ -10,7 +10,7 @@ variable "tags" {
 
 locals {
   name_prefix = "${var.project}-${var.env}-${var.region_short}"
-  ports       = { http = 80, https = 443, app = 80, db = 5432 }
+  ports       = { http = 80, https = 443, app = 80, db = 3306 }
 
   azs = data.aws_availability_zones.available.names
 }

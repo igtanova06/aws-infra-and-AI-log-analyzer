@@ -2,6 +2,8 @@
 *.tfstate
 *.tfstate.backup
 *.tfvars
+*.tfplan
+tfplan
 # .terraform.lock.hcl nên được commit — đảm bảo cả team dùng cùng provider version
 
 # Secrets and sensitive files

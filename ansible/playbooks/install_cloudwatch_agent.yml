@@ -41,7 +41,7 @@
         src: ../templates/cloudwatch_agent_config_web.json.j2
         dest: "{{ cloudwatch_config_path }}"
         mode: '0644'
-      when: "'web' in group_names or 'web' in ansible_hostname"
+      when: "'web' in group_names or 'web' in inventory_hostname or 'l1' in inventory_hostname"
       notify: Restart CloudWatch Agent
 
     - name: Deploy CloudWatch Agent config for App tier
@@ -49,7 +49,7 @@
         src: ../templates/cloudwatch_agent_config_app.json.j2
         dest: "{{ cloudwatch_config_path }}"
         mode: '0644'
-      when: "'app' in group_names or 'l2' in ansible_hostname"
+      when: "'app' in group_names or 'app' in inventory_hostname or 'l2' in inventory_hostname"
       notify: Restart CloudWatch Agent
 
     # ── Step 5: Start CloudWatch Agent ────────────────────
@@ -67,9 +67,8 @@
     - name: Check CloudWatch Agent status
       command: >
         /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
-        -a query
+        -a status
         -m ec2
-        -c default
       register: agent_status
       changed_when: false
 

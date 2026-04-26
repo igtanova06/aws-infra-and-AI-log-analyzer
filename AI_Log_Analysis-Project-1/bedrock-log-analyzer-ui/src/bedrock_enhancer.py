@@ -366,6 +366,69 @@ class BedrockEnhancer:
         # Enhanced analysis instructions with MANDATORY 5 Why
         prompt += (
             "# YOUR TASK: COMPREHENSIVE SECURITY ANALYSIS\n\n"
+            "⚠️⚠️⚠️ CRITICAL: DISTINGUISH SYSTEM ISSUES vs SECURITY ATTACKS ⚠️⚠️⚠️\n\n"
+            "# DECISION TREE: Is This a System Issue or Attack?\n\n"
+            "## 🔧 SYSTEM ISSUE (Operational/Performance Problem)\n"
+            "Flag as 'System Issue' or 'Performance Problem' if:\n"
+            "✅ **Internal Cause:**\n"
+            "   • Application bugs (null pointer, memory leak, logic errors)\n"
+            "   • Misconfiguration (wrong DB connection string, missing env vars)\n"
+            "   • Resource exhaustion (CPU 100%, memory OOM, disk full)\n"
+            "   • Capacity limits (connection pool full, queue overflow)\n"
+            "   • Dependency failures (DB down, API timeout, network partition)\n\n"
+            "✅ **Indicators:**\n"
+            "   • Errors distributed across time (not burst)\n"
+            "   • No external attacker IP pattern\n"
+            "   • Errors from internal services/IPs (10.x, 172.x, 192.168.x)\n"
+            "   • Stack traces, exceptions, timeout errors\n"
+            "   • Gradual degradation (not sudden spike)\n\n"
+            "✅ **Examples:**\n"
+            "   • 'Connection pool exhausted' → System Issue (capacity problem)\n"
+            "   • 'Database deadlock detected' → System Issue (DB optimization needed)\n"
+            "   • 'Out of memory error' → System Issue (memory leak or undersized)\n"
+            "   • 'Timeout connecting to API' → System Issue (dependency failure)\n"
+            "   • 'Null pointer exception' → System Issue (application bug)\n\n"
+            "## 🚨 SECURITY ATTACK (Malicious Activity)\n"
+            "Flag as 'Attack' ONLY if:\n"
+            "✅ **External Threat:**\n"
+            "   • Clear attacker IP(s) - external, non-internal\n"
+            "   • Malicious patterns (SQL injection, XSS, command injection)\n"
+            "   • Brute force attempts (multiple failed logins)\n"
+            "   • Scanning/reconnaissance (port scanning, directory traversal)\n"
+            "   • Exploitation attempts (buffer overflow, RCE)\n\n"
+            "✅ **Indicators:**\n"
+            "   • High volume + High frequency (100+ events, 10+/min)\n"
+            "   • Burst pattern (sudden spike, not gradual)\n"
+            "   • Multiple attack stages (recon → exploit → impact)\n"
+            "   • Malicious payloads in logs (UNION SELECT, ../../../etc/passwd)\n"
+            "   • Automated tool signatures (Nmap, SQLmap, Metasploit)\n\n"
+            "✅ **Examples:**\n"
+            "   • 100+ REJECT events from 10 IPs in 1 min → Attack (DoS)\n"
+            "   • 50 failed logins from same IP in 2 min → Attack (Brute Force)\n"
+            "   • 'UNION SELECT * FROM users' in query → Attack (SQL Injection)\n"
+            "   • Port scanning 22,80,443,3306 → Attack (Reconnaissance)\n"
+            "   • '../../../etc/passwd' in URL → Attack (Path Traversal)\n\n"
+            "## 🤔 AMBIGUOUS CASES (Requires Analysis)\n"
+            "Some issues can be BOTH - attack CAUSING system issue:\n"
+            "• DoS attack → Connection pool exhausted (Attack is PRIMARY, system issue is SECONDARY)\n"
+            "• Brute force → Account lockout (Attack is PRIMARY, lockout is SECONDARY)\n"
+            "• SQL injection → Database crash (Attack is PRIMARY, crash is SECONDARY)\n\n"
+            "In these cases:\n"
+            "1. PRIMARY classification = Attack (because external malicious intent)\n"
+            "2. SECONDARY impact = System Issue (the resulting technical failure)\n"
+            "3. Root Cause = The attack itself\n"
+            "4. WHY #5 = Missing security controls (WAF, rate limiting, input validation)\n\n"
+            "## 📊 CLASSIFICATION MATRIX\n\n"
+            "| Symptom | External IP? | Malicious Pattern? | High Volume? | Classification |\n"
+            "|---------|--------------|-------------------|--------------|----------------|\n"
+            "| Connection pool full | No | No | No | System Issue |\n"
+            "| Connection pool full | Yes | Yes (flood) | Yes (100+) | Attack (DoS) |\n"
+            "| Failed login | No | No | No | System Issue (user error) |\n"
+            "| Failed login | Yes | Yes (brute) | Yes (50+) | Attack (Brute Force) |\n"
+            "| SQL error | No | No | No | System Issue (bug) |\n"
+            "| SQL error | Yes | Yes (injection) | Yes (10+) | Attack (SQL Injection) |\n"
+            "| High CPU | No | No | No | System Issue (inefficient code) |\n"
+            "| High CPU | Yes | Yes (crypto) | Yes | Attack (Cryptomining) |\n\n"
             "⚠️⚠️⚠️ CRITICAL FALSE POSITIVE PREVENTION ⚠️⚠️⚠️\n"
             "Before flagging ANY issue as an attack, you MUST verify:\n"
             "1. VOLUME: Is the event count abnormally HIGH? (e.g., 100+ events, not just 5-10)\n"
@@ -378,15 +441,21 @@ class BedrockEnhancer:
             "• Low-frequency errors (<10 per hour)\n"
             "• Database connection errors without other indicators\n"
             "• Normal admin operations (CloudFormation, Terraform)\n"
-            "• Health check failures\n\n"
+            "• Health check failures\n"
+            "• Internal service errors (bugs, misconfigurations)\n\n"
             "✅ ONLY FLAG AS ATTACK IF:\n"
             "• High volume (100+ events) + High frequency (10+/min) + Clear malicious pattern\n"
             "• Multiple attack stages detected (reconnaissance → exploit → impact)\n"
             "• Actual service degradation or data loss observed\n"
-            "• Clear attacker IP with sustained malicious activity\n\n"
-            "IF IN DOUBT → Flag as 'Operational Issue' or 'Performance Problem', NOT 'Attack'\n\n"
-            "Analyze each issue using the MITRE ATT&CK framework and provide:\n\n"
-            "1. **THREAT CLASSIFICATION**\n"
+            "• Clear attacker IP with sustained malicious activity\n"
+            "• Malicious payloads detected (SQL injection, XSS, command injection)\n\n"
+            "IF IN DOUBT → Flag as 'System Issue' or 'Performance Problem', NOT 'Attack'\n\n"
+            "Analyze each issue and provide:\n\n"
+            "1. **ISSUE CLASSIFICATION (MANDATORY)**\n"
+            "   - Type: 'Security Attack' OR 'System Issue' OR 'Performance Problem'\n"
+            "   - Justification: Why you classified it this way (use decision tree above)\n"
+            "   - Confidence: How certain are you? (0.0-1.0)\n\n"
+            "2. **THREAT CLASSIFICATION (Only if Type = 'Security Attack')**\n"
             "   - Attack technique (e.g., T1498 Network DoS, T1110 Brute Force, T1078 Valid Accounts)\n"
             "   - Threat actor profile (script kiddie, APT, insider)\n"
             "   - Attack stage (reconnaissance, initial access, persistence, impact, etc.)\n"
@@ -478,18 +547,24 @@ class BedrockEnhancer:
             "[\n"
             "  {\n"
             '    "problem": "exact original problem title",\n'
+            '    "issue_classification": {\n'
+            '      "type": "Security Attack" OR "System Issue" OR "Performance Problem",\n'
+            '      "justification": "Why classified this way (use decision tree)",\n'
+            '      "confidence": 0.85,\n'
+            '      "primary_cause": "External malicious activity" OR "Internal system failure" OR "Capacity/Resource limit"\n'
+            '    },\n'
             '    "attack_classification": {\n'
-            '      "mitre_technique": "T1498 - Network Denial of Service (for DoS) OR T1110.001 - Password Guessing (for brute force)",\n'
-            '      "mitre_tactic": "TA0040 - Impact (for DoS) OR TA0001 - Initial Access (for brute force)",\n'
-            '      "threat_actor_profile": "Automated bot / Script kiddie / APT",\n'
-            '      "attack_stage": "Initial Access / Persistence / Privilege Escalation / Impact"\n'
+            '      "mitre_technique": "T1498 - Network Denial of Service (ONLY if type=Security Attack)",\n'
+            '      "mitre_tactic": "TA0040 - Impact (ONLY if type=Security Attack)",\n'
+            '      "threat_actor_profile": "Automated bot / Script kiddie / APT (ONLY if type=Security Attack)",\n'
+            '      "attack_stage": "Initial Access / Persistence / Impact (ONLY if type=Security Attack)"\n'
             '    },\n'
             '    "attack_progression": {\n'
             '      "stages_detected": [\n'
-            '        {"stage": "Reconnaissance", "description": "Port scanning via VPC REJECT events (ports 22, 3306, 443)", "evidence": "215 REJECT events"},\n'
+            '        {"stage": "Reconnaissance", "description": "Port scanning via VPC REJECT events", "evidence": "215 REJECT events"},\n'
             '        {"stage": "Network Flood", "description": "High-frequency connection attempts", "evidence": "~500 connections in 2 minutes"},\n'
             '        {"stage": "Resource Exhaustion", "description": "Connection pool saturation", "evidence": "Pool 100/100"},\n'
-            '        {"stage": "Service Degradation", "description": "Timeouts and errors", "evidence": "HTTP 500 errors, RDS timeout"}\n'
+            '        {"stage": "Service Degradation", "description": "Timeouts and errors", "evidence": "HTTP 500 errors"}\n'
             '      ]\n'
             '    },\n'
             '    "summary": {\n'

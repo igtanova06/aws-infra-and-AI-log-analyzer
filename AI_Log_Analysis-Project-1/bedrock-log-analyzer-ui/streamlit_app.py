@@ -95,7 +95,8 @@ st.sidebar.subheader("📂 Log Sources")
 LOG_GROUP_OPTIONS = [
     "/aws/vpc/flowlogs",
     "/aws/cloudtrail/logs",
-    "/aws/ec2/application",
+    "/aws/ec2/app-tier/streamlit",
+    "/aws/ec2/web-tier/application",
     "/aws/rds/mysql/error",
     "/aws/rds/mysql/slowquery",
 ]

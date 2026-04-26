@@ -56,6 +56,15 @@ class TelegramNotifier:
             print("[Telegram] No RCA data to send")
             return False
         
+        # CRITICAL: Don't send alert if system is healthy
+        threat_assessment = global_rca.get('threat_assessment', {})
+        severity = threat_assessment.get('severity', '')
+        status = global_rca.get('status', '')
+        
+        if severity == 'None' or status == 'healthy':
+            print("[Telegram] ✅ System healthy - no alert needed")
+            return False
+        
         # Build alert payload
         payload = self._build_alert_payload(global_rca, correlated_events, analysis_metadata)
         

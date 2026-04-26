@@ -310,28 +310,46 @@ class BedrockEnhancer:
         # Attack-specific guidance
         attack_guidance = {
             'vpc_flow': (
-                "# ATTACK PATTERNS TO DETECT\n"
-                "• Port Scanning: Multiple connection attempts to different ports from same IP\n"
-                "• Brute Force: High frequency of REJECT events to SSH (22), RDP (3389)\n"
-                "• DDoS: Abnormally high traffic volume from multiple IPs\n"
-                "• Lateral Movement: Internal IP scanning after initial compromise\n"
-                "• Data Exfiltration: Large outbound traffic to suspicious destinations\n\n"
+                "# ATTACK PATTERNS TO DETECT (REQUIRE STRONG EVIDENCE)\n"
+                "⚠️ CRITICAL: Do NOT flag normal traffic as attacks. Require MULTIPLE indicators:\n\n"
+                "• Port Scanning: 20+ connection attempts to 5+ different ports from same IP within 5 minutes\n"
+                "• Brute Force: 50+ REJECT events to SSH (22) or RDP (3389) from same IP within 10 minutes\n"
+                "• DDoS: 100+ connections from 10+ unique IPs within 1 minute (distributed attack)\n"
+                "• Lateral Movement: Internal IP scanning 5+ other internal IPs after initial compromise\n"
+                "• Data Exfiltration: Large outbound traffic (>100MB) to suspicious external destinations\n\n"
+                "⚠️ NORMAL TRAFFIC (DO NOT FLAG AS ATTACK):\n"
+                "• Single connection attempts (could be legitimate retries)\n"
+                "• Low-frequency REJECTs (<10 per minute from single IP)\n"
+                "• Database connections from application servers (expected behavior)\n"
+                "• Health check failures (normal operational noise)\n\n"
             ),
             'cloudtrail': (
-                "# ATTACK PATTERNS TO DETECT\n"
-                "• Privilege Escalation: CreateAccessKey, AttachRolePolicy by non-admin\n"
-                "• Resource Destruction: DeleteVpc, TerminateInstances, StopLogging\n"
-                "• Credential Theft: GetPasswordData, CreateLoginProfile\n"
-                "• Reconnaissance: Multiple DescribeInstances, ListBuckets calls\n"
-                "• Persistence: CreateUser, PutRolePolicy for backdoor access\n\n"
+                "# ATTACK PATTERNS TO DETECT (REQUIRE STRONG EVIDENCE)\n"
+                "⚠️ CRITICAL: Do NOT flag normal admin operations as attacks. Require MULTIPLE indicators:\n\n"
+                "• Privilege Escalation: 10+ CreateAccessKey, AttachRolePolicy by non-admin within 30 minutes\n"
+                "• Resource Destruction: Multiple DeleteVpc, TerminateInstances, StopLogging from unexpected user\n"
+                "• Credential Theft: 5+ GetPasswordData, CreateLoginProfile attempts within 10 minutes\n"
+                "• Reconnaissance: 50+ DescribeInstances, ListBuckets calls from single IP within 5 minutes\n"
+                "• Persistence: CreateUser + PutRolePolicy from compromised account\n\n"
+                "⚠️ NORMAL OPERATIONS (DO NOT FLAG AS ATTACK):\n"
+                "• Single API calls from known admin users\n"
+                "• Scheduled automation (CloudFormation, Terraform)\n"
+                "• AWS service-linked roles performing expected actions\n"
+                "• Low-frequency AccessDenied (could be permission misconfiguration)\n\n"
             ),
             'app': (
-                "# ATTACK PATTERNS TO DETECT\n"
-                "• SQL Injection: Malformed queries, UNION SELECT patterns\n"
-                "• Authentication Bypass: Multiple failed login attempts\n"
-                "• Path Traversal: ../ patterns in file access logs\n"
-                "• Command Injection: Shell metacharacters in input\n"
-                "• Session Hijacking: Token reuse, expired session access\n\n"
+                "# ATTACK PATTERNS TO DETECT (REQUIRE STRONG EVIDENCE)\n"
+                "⚠️ CRITICAL: Do NOT flag normal errors as attacks. Require MULTIPLE indicators:\n\n"
+                "• SQL Injection: 10+ malformed queries with UNION SELECT, OR 1=1 patterns within 5 minutes\n"
+                "• Authentication Bypass: 20+ failed login attempts from same IP within 10 minutes\n"
+                "• Path Traversal: 5+ requests with ../ patterns from same IP within 5 minutes\n"
+                "• Command Injection: Shell metacharacters (;, |, &&) in input from same IP\n"
+                "• Session Hijacking: Same session token used from 3+ different IPs\n\n"
+                "⚠️ NORMAL ERRORS (DO NOT FLAG AS ATTACK):\n"
+                "• Single failed login (user forgot password)\n"
+                "• Connection timeouts (network issues, not attack)\n"
+                "• Database connection errors (operational issue, not attack)\n"
+                "• Low-frequency 4xx errors (normal user mistakes)\n\n"
             ),
             'multi_source': (
                 "# CROSS-SOURCE ATTACK PATTERNS TO DETECT\n"
@@ -348,6 +366,25 @@ class BedrockEnhancer:
         # Enhanced analysis instructions with MANDATORY 5 Why
         prompt += (
             "# YOUR TASK: COMPREHENSIVE SECURITY ANALYSIS\n\n"
+            "⚠️⚠️⚠️ CRITICAL FALSE POSITIVE PREVENTION ⚠️⚠️⚠️\n"
+            "Before flagging ANY issue as an attack, you MUST verify:\n"
+            "1. VOLUME: Is the event count abnormally HIGH? (e.g., 100+ events, not just 5-10)\n"
+            "2. FREQUENCY: Is the rate abnormally FAST? (e.g., 10+ events/minute, not 1-2/hour)\n"
+            "3. PATTERN: Are there MULTIPLE attack indicators? (not just single error)\n"
+            "4. INTENT: Is there clear MALICIOUS intent? (not operational errors)\n"
+            "5. IMPACT: Did it cause ACTUAL damage? (service degradation, data loss)\n\n"
+            "❌ DO NOT FLAG AS ATTACK:\n"
+            "• Single connection failures (normal network issues)\n"
+            "• Low-frequency errors (<10 per hour)\n"
+            "• Database connection errors without other indicators\n"
+            "• Normal admin operations (CloudFormation, Terraform)\n"
+            "• Health check failures\n\n"
+            "✅ ONLY FLAG AS ATTACK IF:\n"
+            "• High volume (100+ events) + High frequency (10+/min) + Clear malicious pattern\n"
+            "• Multiple attack stages detected (reconnaissance → exploit → impact)\n"
+            "• Actual service degradation or data loss observed\n"
+            "• Clear attacker IP with sustained malicious activity\n\n"
+            "IF IN DOUBT → Flag as 'Operational Issue' or 'Performance Problem', NOT 'Attack'\n\n"
             "Analyze each issue using the MITRE ATT&CK framework and provide:\n\n"
             "1. **THREAT CLASSIFICATION**\n"
             "   - Attack technique (e.g., T1498 Network DoS, T1110 Brute Force, T1078 Valid Accounts)\n"
@@ -408,6 +445,7 @@ class BedrockEnhancer:
         # Critical rules
         prompt += (
             "# CRITICAL RULES\n"
+            "✓ FALSE POSITIVE PREVENTION: Only flag as attack if volume (100+ events) + frequency (10+/min) + clear malicious pattern\n"
             "✓ Use ACTUAL values from logs (IPs, usernames, timestamps)\n"
             "✓ Provide EXECUTABLE commands (not placeholders)\n"
             "✓ Reference SPECIFIC log entries as evidence\n"
@@ -429,7 +467,8 @@ class BedrockEnhancer:
             "✗ NO generic advice without evidence\n"
             "✗ NO placeholder values like <instance-id>\n"
             "✗ NO assumptions not supported by logs\n"
-            "✗ DO NOT call WHY #5 'root cause' - it's a PROCESS GAP!\n\n"
+            "✗ DO NOT call WHY #5 'root cause' - it's a PROCESS GAP!\n"
+            "✗ DO NOT flag low-volume operational errors as attacks!\n\n"
         )
         
         # JSON schema with 5 Why structure
@@ -1010,19 +1049,33 @@ class BedrockEnhancer:
             parsed = self._extract_json_object(text)
             
             if parsed:
-                rca = GlobalRCA(
-                    incident_story=parsed.get('incident_story', []),
-                    threat_assessment=parsed.get('threat_assessment', {}),
-                    attack_narrative=parsed.get('attack_narrative', ''),
-                    affected_components=parsed.get('affected_components', []),
-                    root_cause=parsed.get('root_cause', ''),
-                    mitre_mapping=parsed.get('mitre_mapping', {}),
-                    immediate_actions=parsed.get('immediate_actions', []),
-                    remediation_plan=parsed.get('remediation_plan', {}),
-                    raw_ai_response=parsed,
-                    tokens_used=total_tokens,
-                    cost=cost,
-                )
+                # Check if AI returned "healthy" status (no issues)
+                if parsed.get('status') == 'healthy':
+                    print("[Global RCA] AI determined system is healthy - no significant issues")
+                    rca = GlobalRCA(
+                        attack_narrative=parsed.get('summary', 'No significant security threats or operational issues detected.'),
+                        root_cause='',
+                        incident_story=[],
+                        threat_assessment={'severity': 'None', 'confidence': 1.0, 'scope': 'System healthy'},
+                        raw_ai_response=parsed,
+                        tokens_used=total_tokens,
+                        cost=cost,
+                    )
+                else:
+                    # Normal RCA with issues detected
+                    rca = GlobalRCA(
+                        incident_story=parsed.get('incident_story', []),
+                        threat_assessment=parsed.get('threat_assessment', {}),
+                        attack_narrative=parsed.get('attack_narrative', ''),
+                        affected_components=parsed.get('affected_components', []),
+                        root_cause=parsed.get('root_cause', ''),
+                        mitre_mapping=parsed.get('mitre_mapping', {}),
+                        immediate_actions=parsed.get('immediate_actions', []),
+                        remediation_plan=parsed.get('remediation_plan', {}),
+                        raw_ai_response=parsed,
+                        tokens_used=total_tokens,
+                        cost=cost,
+                    )
             else:
                 rca = GlobalRCA(
                     attack_narrative=text[:500],
@@ -1122,10 +1175,22 @@ class BedrockEnhancer:
         # --- Output format ---
         prompt += (
             "# YOUR TASK\n"
-            "Produce a comprehensive Global Root Cause Analysis as a single JSON object.\n\n"
+            "Analyze the logs and determine if there are any SIGNIFICANT security threats or operational issues.\n\n"
+            "⚠️⚠️⚠️ CRITICAL: IF NO SIGNIFICANT ISSUES FOUND ⚠️⚠️⚠️\n"
+            "If the logs show NORMAL OPERATIONS with no attacks or critical issues, return:\n"
+            "{\n"
+            '  "status": "healthy",\n'
+            '  "summary": "No significant security threats or operational issues detected. System operating normally.",\n'
+            '  "details": "Brief description of what was analyzed and why it\'s considered normal"\n'
+            "}\n\n"
+            "ONLY produce a full Root Cause Analysis if you detect:\n"
+            "- High-volume attacks (100+ events)\n"
+            "- Critical security threats (confirmed attacks)\n"
+            "- Severe operational issues (service degradation, outages)\n\n"
             "# CRITICAL RULES\n"
             "- Use ONLY data from the signals and logs above. NEVER invent IPs, timestamps, or events.\n"
             "- NEVER block internal/destination IPs (10.x, 172.x, 192.168.x). Block EXTERNAL SOURCE IPs only.\n"
+            "- DO NOT flag low-volume operational errors as attacks (1-10 errors = normal noise)\n"
             "- MITRE technique MUST match actual attack type:\n"
             "  • DoS/DDoS → TA0040 Impact + T1498 Network Denial of Service (NOT T1190!)\n"
             "  • Port 3306 attacks → T1190 Exploit or T1078 Valid Accounts (NOT RDP!)\n"

@@ -487,12 +487,33 @@ else:
         global_rca = st.session_state.global_rca
         
         if global_rca and (global_rca.incident_story or global_rca.attack_narrative):
-            # --- Incident Story (TL;DR) ---
-            if global_rca.incident_story:
-                st.subheader("🚨 Incident Story (TL;DR)")
-                for step in global_rca.incident_story:
-                    st.markdown(f"- {step}")
+            # Check if system is healthy (no issues)
+            threat_assessment = global_rca.threat_assessment or {}
+            severity = threat_assessment.get('severity', '')
+            
+            if severity == 'None' or (global_rca.raw_ai_response and global_rca.raw_ai_response.get('status') == 'healthy'):
+                # HEALTHY STATUS - No significant issues
+                st.success("✅ System Health: NORMAL")
+                st.info(global_rca.attack_narrative or "No significant security threats or operational issues detected.")
+                
+                if global_rca.raw_ai_response and global_rca.raw_ai_response.get('details'):
+                    with st.expander("📋 Analysis Details"):
+                        st.write(global_rca.raw_ai_response['details'])
+                
                 st.divider()
+                st.markdown("**What was analyzed:**")
+                st.write(f"- {result.metadata.total_matches} log entries from {result.metadata.total_files_searched} sources")
+                st.write(f"- Time range: {result.metadata.search_term}")
+                st.write(f"- No attacks, critical errors, or operational issues detected")
+                
+            else:
+                # ISSUES DETECTED - Show full RCA
+                # --- Incident Story (TL;DR) ---
+                if global_rca.incident_story:
+                    st.subheader("🚨 Incident Story (TL;DR)")
+                    for step in global_rca.incident_story:
+                        st.markdown(f"- {step}")
+                    st.divider()
             
             # --- Threat Assessment ---
             if global_rca.threat_assessment:

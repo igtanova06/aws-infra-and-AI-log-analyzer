@@ -23,10 +23,13 @@ class TelegramNotifier:
         self.versus_url = versus_url or os.getenv("VERSUS_INCIDENT_URL", "http://localhost:3000")
         self.enabled = os.getenv("TELEGRAM_ALERTS_ENABLED", "false").lower() == "true"
         
-        # Direct Telegram API configuration
+        # Direct Telegram API configuration (RECOMMENDED)
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
         self.use_direct_telegram = bool(self.bot_token and self.chat_id)
+        
+        if self.enabled and not self.use_direct_telegram:
+            print("[Telegram] ⚠️ Warning: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set. Using Versus Incident fallback.")
         
     def send_attack_alert(
         self, 
@@ -56,9 +59,13 @@ class TelegramNotifier:
         # Build alert payload
         payload = self._build_alert_payload(global_rca, correlated_events, analysis_metadata)
         
-        # Try direct Telegram API first if configured
+        # Try direct Telegram API first if configured (RECOMMENDED)
         if self.use_direct_telegram:
-            return self._send_direct_telegram(payload)
+            success = self._send_direct_telegram(payload)
+            if success:
+                return True
+            else:
+                print("[Telegram] ⚠️ Direct Telegram failed, trying Versus Incident fallback...")
         
         # Fallback to Versus Incident service
         try:
@@ -78,6 +85,7 @@ class TelegramNotifier:
                 
         except requests.exceptions.RequestException as e:
             print(f"[Telegram] ❌ Connection error: {e}")
+            print(f"[Telegram] 💡 Tip: Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID for direct Telegram API")
             return False
     
     def _send_direct_telegram(self, payload: Dict) -> bool:

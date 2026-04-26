@@ -22,16 +22,16 @@
             "timezone": "UTC"
           },
           {
-            "file_path": "/var/log/docker",
+            "file_path": "/var/log/streamlit/*.log",
             "log_group_name": "/aws/ec2/app-tier/streamlit",
-            "log_stream_name": "{instance_id}/docker",
+            "log_stream_name": "{instance_id}/streamlit",
             "retention_in_days": 7,
             "timezone": "UTC"
           },
           {
-            "file_path": "/var/log/app/*.log",
+            "file_path": "/var/lib/docker/containers/*/*.log",
             "log_group_name": "/aws/ec2/app-tier/streamlit",
-            "log_stream_name": "{instance_id}/application",
+            "log_stream_name": "{instance_id}/docker",
             "retention_in_days": 7,
             "timezone": "UTC"
           }
@@ -72,40 +72,12 @@
           "*"
         ]
       },
-      "diskio": {
-        "measurement": [
-          {
-            "name": "io_time",
-            "rename": "DISK_IO_TIME",
-            "unit": "Milliseconds"
-          }
-        ],
-        "metrics_collection_interval": 60,
-        "resources": [
-          "*"
-        ]
-      },
       "mem": {
         "measurement": [
           {
             "name": "mem_used_percent",
             "rename": "MEM_USED",
             "unit": "Percent"
-          }
-        ],
-        "metrics_collection_interval": 60
-      },
-      "netstat": {
-        "measurement": [
-          {
-            "name": "tcp_established",
-            "rename": "TCP_ESTABLISHED",
-            "unit": "Count"
-          },
-          {
-            "name": "tcp_time_wait",
-            "rename": "TCP_TIME_WAIT",
-            "unit": "Count"
           }
         ],
         "metrics_collection_interval": 60

@@ -1,9 +1,11 @@
+# Terraform
 .terraform/
 *.tfstate
 *.tfstate.backup
 *.tfvars
 *.tfplan
 tfplan
+terraform_outputs.json
 # .terraform.lock.hcl nên được commit — đảm bảo cả team dùng cùng provider version
 
 # Secrets and sensitive files
@@ -21,9 +23,22 @@ __pycache__/
 *.pyd
 .Python
 *.so
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*~

@@ -720,10 +720,10 @@ else:
                             st.markdown("**Evidence:**")
                             for ev_item in event.evidence[:5]:
                                 st.code(ev_item, language='text')
-        
-        # Analysis & Deep Dive tab
-        analysis_tab = tab3 if has_correlation else tab2
-
+    
+    # Analysis & Deep Dive tab
+    analysis_tab = tab3 if has_correlation else tab2
+    
     with analysis_tab:
         st.subheader("Analysis & Deep Dive")
         

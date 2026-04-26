@@ -97,8 +97,7 @@ LOG_GROUP_OPTIONS = [
     "/aws/cloudtrail/logs",
     "/aws/ec2/app-tier/streamlit",
     "/aws/ec2/web-tier/application",
-    "/aws/rds/mysql/error",
-    "/aws/rds/mysql/slowquery",
+    "/aws/rds/instance/p1-dev-apse1-db/error",
 ]
 
 selected_log_groups = st.sidebar.multiselect(

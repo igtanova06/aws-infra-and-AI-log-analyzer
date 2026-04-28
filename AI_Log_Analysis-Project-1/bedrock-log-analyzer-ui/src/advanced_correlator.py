@@ -181,6 +181,10 @@ class CorrelationRule:
     # Scoring
     base_confidence: float
     confidence_modifiers: Dict[str, float]  # {"has_trace_id": +20, "automated": +10}
+    
+    # Thresholds (optional, for DoS/brute force detection)
+    minimum_event_count: Optional[int] = None  # Minimum events to trigger rule
+    minimum_unique_ips: Optional[int] = None   # Minimum unique IPs for distributed attacks
 
 
 class RuleEngine:
@@ -309,6 +313,22 @@ class RuleEngine:
         if not all(src in sources_present for src in rule.required_sources):
             return 0.0
         
+        # CRITICAL: Check minimum event count threshold (for DoS detection)
+        min_event_count = getattr(rule, 'minimum_event_count', None)
+        if min_event_count and len(timeline) < min_event_count:
+            if rule.rule_id == 'R007':
+                print(f"[DoS Filter] Rejected: Only {len(timeline)} events, need {min_event_count} minimum")
+            return 0.0
+        
+        # CRITICAL: Check minimum unique IPs (for DoS detection)
+        min_unique_ips = getattr(rule, 'minimum_unique_ips', None)
+        if min_unique_ips:
+            unique_actors = len(set(event.actor for event in timeline))
+            if unique_actors < min_unique_ips:
+                if rule.rule_id == 'R007':
+                    print(f"[DoS Filter] Rejected: Only {unique_actors} unique IPs, need {min_unique_ips} minimum")
+                return 0.0
+        
         # Check if event sequence matches
         sequence_match = self._check_sequence(rule.event_sequence, timeline, rule.max_time_gap_seconds)
         if not sequence_match:
@@ -323,6 +343,14 @@ class RuleEngine:
         
         if self._is_automated(timeline):
             confidence += rule.confidence_modifiers.get('automated', 0)
+        
+        # Apply high_frequency modifier based on actual event count
+        if len(timeline) >= 100:
+            confidence += rule.confidence_modifiers.get('high_frequency', 0)
+        
+        # Apply multiple_sources modifier
+        if len(sources_present) > 1:
+            confidence += rule.confidence_modifiers.get('multiple_sources', 0)
         
         return min(confidence, 100.0)
     

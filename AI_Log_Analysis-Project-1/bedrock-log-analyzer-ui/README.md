@@ -1,196 +1,298 @@
-# 🔍 AI-Powered Log Analysis System
+# 🤖 AI-Powered Log Analysis System
 
-Advanced multi-source log correlation and AI-powered root cause analysis system for AWS environments.
+**Streamlit-based log analyzer with AWS Bedrock AI enhancement and Telegram alerts**
 
-## 🎯 Features
+## ✨ Features
 
-- **Multi-Source Correlation** - Correlate events across VPC Flow Logs, CloudTrail, Application Logs, and Database Logs
-- **AI-Powered RCA** - Global Root Cause Analysis using AWS Bedrock (Claude 3.5 Sonnet)
-- **Advanced Detection** - Rule-based detection with MITRE ATT&CK mapping
-- **Real-Time Alerts** - Telegram notifications via Versus Incident gateway
-- **Rich Context** - Event abstraction layer for token-efficient AI analysis
+- 🔍 **Multi-source log analysis** - Analyze logs from 9 CloudWatch log groups simultaneously
+- 🤖 **AI-powered insights** - AWS Bedrock (Claude) for root cause analysis
+- 🔗 **Cross-source correlation** - Detect attack patterns across multiple log sources
+- 📱 **Telegram alerts** - Real-time security notifications
+- 📊 **Interactive UI** - Streamlit-based dashboard with time range selection
+- 🎯 **Smart detection** - Rule-based + AI hybrid approach
 
-## 📋 Prerequisites
+## 🏗️ Architecture
 
-- Python 3.11+
-- AWS Account with:
-  - CloudWatch Logs access
-  - Bedrock access (Claude 3.5 Sonnet)
-  - IAM permissions for log reading
-- Telegram Bot (for alerts)
-- Docker (for deployment)
+### Supported Log Groups (9 total)
+
+**Infrastructure Logs:**
+- `/aws/vpc/flowlogs` - Network traffic analysis
+- `/aws/cloudtrail/logs` - API activity tracking
+
+**Web Tier (Layer 1):**
+- `/aws/ec2/web-tier/system` - System logs (messages, secure)
+- `/aws/ec2/web-tier/httpd` - Apache access/error logs
+- `/aws/ec2/web-tier/application` - PHP application logs
+
+**App Tier (Layer 2):**
+- `/aws/ec2/app-tier/system` - System logs
+- `/aws/ec2/app-tier/streamlit` - Streamlit application logs
+
+**Database:**
+- `/aws/rds/mysql/error` - MySQL error logs
+- `/aws/rds/mysql/slowquery` - Slow query logs
 
 ## 🚀 Quick Start
 
 ### 1. Installation
 
 ```bash
-# Clone repository
-cd AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui
-
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment template
+# Configure environment
 cp .env.example .env
-
-# Edit .env with your credentials
-nano .env
+nano .env  # Edit with your settings
 ```
 
 ### 2. Configuration
 
-Edit `.env`:
+Edit `.env` file:
 
 ```bash
 # AWS Configuration
 AWS_REGION=ap-southeast-1
-AWS_PROFILE=default  # or leave empty for EC2 IAM role
+AWS_PROFILE=default
 
-# Bedrock Configuration
-BEDROCK_MODEL=apac.anthropic.claude-3-5-sonnet-20240620-v1:0
-
-# Telegram Alert Configuration
-TELEGRAM_ALERTS_ENABLED=true
-VERSUS_INCIDENT_URL=http://localhost:3000
+# Telegram Bot (RECOMMENDED)
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
+TELEGRAM_ALERTS_ENABLED=true
+
+# Bedrock Model
+BEDROCK_MODEL=anthropic.claude-3-haiku-20240307-v1:0
 ```
 
-### 3. Run Locally
+### 3. Run Application
 
 ```bash
+# Local development
 streamlit run streamlit_app.py
+
+# Production (Docker)
+docker build -t log-analyzer .
+docker run -p 8501:8501 --env-file .env log-analyzer
 ```
 
-Open browser: http://localhost:8501
+### 4. Access
 
-### 4. Run with Docker
+Open browser: `http://localhost:8501`
 
-```bash
-# Build image
-docker build -t bedrock-log-analyzer .
+## 📊 Usage
 
-# Run container
-docker run -d \
-  --name log-analyzer \
-  -p 8501:8501 \
-  -e AWS_REGION=ap-southeast-1 \
-  -e TELEGRAM_ALERTS_ENABLED=true \
-  -e VERSUS_INCIDENT_URL=http://versus-incident:3000 \
-  -v ~/.aws:/root/.aws:ro \
-  bedrock-log-analyzer
-```
+### Basic Analysis
 
-## 🧪 Testing with Attack Simulation
+1. **Select Log Groups** - Choose from 9 available sources (all selected by default)
+2. **Set Time Range** - Pick start/end date and time
+3. **Optional Search** - Enter keywords or leave blank for auto-scan
+4. **Enable AI** - Toggle AI enhancement for deeper insights
+5. **Analyze** - Click "Analyze Logs" button
 
-### 1. Deploy Infrastructure
+### Advanced Features
 
-```bash
-# Deploy with Terraform + Ansible
-cd ../../
-terraform -chdir=environments/dev init
-terraform -chdir=environments/dev apply
+**Cross-source Correlation:**
+- Automatically enabled when 2+ log groups selected
+- Detects attack patterns across multiple sources
+- Uses correlation rules from `correlation_rules.json`
 
-# Configure with Ansible
-export TELEGRAM_BOT_TOKEN="your_token"
-export TELEGRAM_CHAT_ID="your_chat_id"
-ansible-playbook ansible/playbooks/site.yml
-```
+**AI Analysis:**
+- Global Root Cause Analysis (1 comprehensive AI call)
+- 5 Why Analysis for deep root cause
+- Control Gap identification
+- MITRE ATT&CK mapping
+- Immediate action recommendations
 
-### 2. Run Attack Simulation
+**Telegram Alerts:**
+- Automatic alerts when attacks detected
+- Rich formatting with severity, confidence, evidence
+- Direct Telegram API (no middleware needed)
 
-```bash
-# Get ALB DNS from Terraform output
-ALB_DNS=$(terraform -chdir=environments/dev output -raw alb_dns_name)
+## 🔧 Configuration Files
 
-# Run simulation
-python simulate_attack.py --target http://${ALB_DNS}:8080
-```
+### correlation_rules.json
 
-### 3. Analyze Logs
-
-1. Wait 2-3 minutes for logs to appear in CloudWatch
-2. Open AI Log Analyzer UI (via SSH tunnel if private)
-3. Select time range: Last 10 minutes
-4. Select all log sources
-5. Click "Analyze Logs"
-6. Check Telegram for alert
-
-## 📊 Architecture
-
-```
-CloudWatch Logs → Parser → Pattern Analyzer → Rule Detector
-                                                    ↓
-                                          Advanced Correlator
-                                                    ↓
-                                          Event Abstraction
-                                                    ↓
-                                          Bedrock AI (RCA)
-                                                    ↓
-                                          Telegram Alert
-```
-
-## 🔧 Advanced Configuration
-
-### Correlation Rules
-
-Edit `correlation_rules.json` to customize detection rules:
+Define custom correlation rules:
 
 ```json
 {
-  "rule_id": "R001",
-  "name": "Reconnaissance to Exploit",
-  "required_sources": ["vpc_flow", "application"],
-  "event_sequence": ["network_reject", "sql_injection"],
-  "max_time_gap_seconds": 300,
-  "severity": "CRITICAL"
+  "rules": [
+    {
+      "name": "SQL Injection Attack",
+      "description": "Detect SQL injection attempts",
+      "conditions": [
+        {
+          "source": "/aws/ec2/web-tier/httpd",
+          "pattern": "(?i)(union|select|insert|update|delete|drop).*from"
+        },
+        {
+          "source": "/aws/rds/mysql/error",
+          "pattern": "(?i)syntax error"
+        }
+      ],
+      "severity": "Critical",
+      "time_window_seconds": 300
+    }
+  ]
 }
 ```
 
-### Log Sources
+### CloudWatch Agent Config
 
-Supported log formats:
-- VPC Flow Logs
-- CloudTrail (JSON)
-- Apache Access/Error Logs
-- Syslog (SSH, system)
-- MySQL Error/Slow Query Logs
-- JSON Application Logs
+See `ansible/templates/cloudwatch_agent_config_*.json.j2` for agent configuration.
 
-## 📚 Documentation
+## 🧪 Testing
 
-- [System Architecture](../../docs/SYSTEM_ARCHITECTURE.md)
-- [Setup Guide](../../docs/SETUP_GUIDE.md)
-- [Telegram Setup](../../docs/TELEGRAM_SETUP.md)
-- [DevOps Review](../DEVOPS_REVIEW_AND_RECOMMENDATIONS.md)
+### Test Telegram Bot
+
+```bash
+python3 test_telegram.py
+```
+
+### Generate Test Logs
+
+```bash
+python3 generate_omni_logs.py
+```
+
+### Debug Correlator
+
+```bash
+python3 debug_correlator.py
+```
+
+## 📦 Project Structure
+
+```
+bedrock-log-analyzer-ui/
+├── streamlit_app.py              # Main Streamlit application
+├── src/
+│   ├── advanced_correlator.py    # Cross-source correlation engine
+│   ├── bedrock_enhancer.py       # AWS Bedrock AI integration
+│   ├── log_parser.py             # Log parsing and normalization
+│   ├── log_preprocessor.py       # Event abstraction layer
+│   ├── pattern_analyzer.py       # Pattern detection and clustering
+│   ├── rule_detector.py          # Rule-based detection
+│   ├── telegram_notifier.py      # Telegram alert sender
+│   └── models.py                 # Data models
+├── correlation_rules.json        # Correlation rule definitions
+├── requirements.txt              # Python dependencies
+├── Dockerfile                    # Container image
+└── .env.example                  # Environment template
+```
+
+## 🔐 Security
+
+### IAM Permissions Required
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Telegram Bot Setup
+
+1. Create bot with `@BotFather` on Telegram
+2. Get `BOT_TOKEN`
+3. Send message to your bot
+4. Get `CHAT_ID` from: `https://api.telegram.org/bot<BOT_TOKEN>/getUpdates`
+5. Add to `.env` file
 
 ## 🐛 Troubleshooting
 
-### No logs found
-- Verify CloudWatch log groups exist
-- Check IAM permissions
-- Verify time range includes log events
+### No logs appearing
+
+```bash
+# Check CloudWatch Agent
+sudo systemctl status amazon-cloudwatch-agent
+
+# Restart agent
+sudo systemctl restart amazon-cloudwatch-agent
+
+# View agent logs
+sudo tail -f /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
+```
 
 ### Bedrock errors
-- Check model availability in your region
-- Verify Bedrock permissions
-- Try different model (e.g., claude-3-haiku for on-demand)
 
-### Telegram alerts not working
-- Verify Versus Incident is running: `docker ps | grep versus`
-- Check environment variables are set
-- Test with: `curl http://localhost:3000/health`
+```bash
+# Check model availability
+aws bedrock list-foundation-models --region ap-southeast-1
 
-## 📝 License
+# Test model access
+aws bedrock invoke-model \
+    --model-id anthropic.claude-3-haiku-20240307-v1:0 \
+    --body '{"prompt":"Hello","max_tokens":100}' \
+    --region ap-southeast-1 \
+    output.json
+```
 
-MIT License - See LICENSE file for details
+### Telegram not working
 
-## 👥 Contributors
+```bash
+# Test bot manually
+curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage" \
+    -d "chat_id=<CHAT_ID>&text=Test message"
 
-- DevOps Security Team
+# Run test script
+python3 test_telegram.py
+```
 
-## 🔗 Related Projects
+## 📈 Performance
 
-- [Versus Incident](https://github.com/versuscontrol/versus-incident) - Alert gateway
-- [AWS Bedrock](https://aws.amazon.com/bedrock/) - AI foundation models
+- **Log retrieval**: ~2-5 seconds per log group
+- **Pattern analysis**: ~1-3 seconds for 10k logs
+- **AI analysis**: ~5-10 seconds (1 API call)
+- **Total**: ~15-30 seconds for full analysis
+
+## 💰 Cost Estimation
+
+**AWS Bedrock (Claude Haiku):**
+- Input: $0.00025 per 1K tokens
+- Output: $0.00125 per 1K tokens
+- Typical analysis: ~$0.01-0.05 per run
+
+**CloudWatch Logs:**
+- Ingestion: $0.50 per GB
+- Storage: $0.03 per GB/month
+- Typical: ~$5-10 per month
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Create Pull Request
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- AWS Bedrock for AI capabilities
+- Streamlit for UI framework
+- Claude AI for analysis engine
+
+---
+
+**Built with ❤️ for security operations teams**

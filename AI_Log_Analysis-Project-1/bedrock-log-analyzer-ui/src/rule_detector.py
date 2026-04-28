@@ -33,7 +33,10 @@ class RuleBasedDetector:
         }
     
     def detect_issues(self, analysis: AnalysisData) -> List[dict]:
-        """Detect issues from analysis data with context awareness"""
+        """
+        Detect issues from analysis data with context awareness.
+        Returns empty list if no significant issues found (normal operations).
+        """
         issues = []
         
         # Check for connection issues
@@ -61,12 +64,14 @@ class RuleBasedDetector:
         if sec_result:
             issues.append(sec_result)
         
-        # General issue if nothing specific found
+        # CRITICAL: Only flag general issues if error count is ABNORMALLY HIGH
+        # Low error counts (<10) are normal operational noise
         if not issues and analysis.total_entries > 0:
             severity_dist = analysis.severity_distribution
             error_count = severity_dist.get('ERROR', 0) + severity_dist.get('CRITICAL', 0) + severity_dist.get('FATAL', 0)
             
-            if error_count > 0:
+            # THRESHOLD: Only flag if 10+ errors (not just 1-2 errors)
+            if error_count >= 10:
                 components = analysis.components
                 most_common_component = max(components.items(), key=lambda x: x[1])[0] if components else 'unknown'
                 
@@ -80,6 +85,9 @@ class RuleBasedDetector:
                     'severity': severity,
                     'count': error_count
                 })
+            else:
+                # Low error count = normal operations, not an issue
+                print(f"[Rule Detector] {error_count} errors detected - below threshold (10), considered normal operations")
         
         return issues
     

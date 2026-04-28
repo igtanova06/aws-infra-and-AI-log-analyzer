@@ -108,7 +108,7 @@
     {
       "rule_id": "R007",
       "name": "Denial of Service",
-      "description": "High volume of network rejects in short time",
+      "description": "VERY high volume of network rejects in short time from multiple IPs (minimum 100 events in 60 seconds)",
       "required_sources": ["vpc_flow"],
       "event_sequence": ["network_reject"],
       "max_time_gap_seconds": 60,
@@ -116,11 +116,14 @@
       "severity": "CRITICAL",
       "mitre_tactics": ["TA0040"],
       "mitre_techniques": ["T1498"],
-      "base_confidence": 70.0,
+      "base_confidence": 50.0,
       "confidence_modifiers": {
-        "high_frequency": 20.0,
-        "automated": 15.0
-      }
+        "high_frequency": 30.0,
+        "automated": 20.0,
+        "multiple_sources": 20.0
+      },
+      "minimum_event_count": 100,
+      "minimum_unique_ips": 3
     },
     {
       "rule_id": "R008",

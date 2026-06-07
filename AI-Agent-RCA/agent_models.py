@@ -20,8 +20,9 @@ def get_model_by_phase(phase: str):
         model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
         temperature = 0.0
         
-    return ChatBedrock(
-        region_name=region,
-        model_kwargs={"temperature": temperature},
-        **{"model_id": model_id}
-    )
+    kwargs = {
+        "model_id": model_id,
+        "region_name": region,
+        "model_kwargs": {"temperature": temperature}
+    }
+    return ChatBedrock(**kwargs)

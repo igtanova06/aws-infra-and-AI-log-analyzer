@@ -32,13 +32,16 @@
   - `/aws/ec2/app-tier/system` — System logs
   - `/aws/ec2/app-tier/streamlit` — AI Agent application logs
 
+### **Layer 3 — Database Tier (Private & Isolated)**
+- **Dịch vụ**: RDS MySQL 8.0
+- **Đặc điểm**: Nằm trong DB subnets riêng, không có route ra ngoài Internet/NAT. Chỉ nhận kết nối Inbound port 3306 từ Layer 1 Web Security Group. Deny all egress.
+- **Log Groups**:
+  - `/aws/rds/mysql/error` — MySQL error logs
+  - `/aws/rds/mysql/slowquery` — Slow query logs
+
 ### **Infrastructure Logs**
 - `/aws/vpc/flowlogs` — VPC Flow Logs
 - `/aws/cloudtrail/logs` — CloudTrail API logs
-
-### **Database Logs**
-- `/aws/rds/mysql/error` — MySQL error logs
-- `/aws/rds/mysql/slowquery` — Slow query logs
 
 **TỔNG CỘNG: 9 LOG GROUPS**
 

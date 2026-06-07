@@ -1,6 +1,6 @@
 # 🏗️ AWS Infrastructure & AI-Powered RCA Agent
 
-> **Hệ thống hạ tầng AWS 2-tier với AI Agent tự động phân tích nguyên nhân gốc rễ (Root Cause Analysis)**
+> **Hệ thống hạ tầng AWS 3-tier với AI Agent tự động phân tích nguyên nhân gốc rễ (Root Cause Analysis)**
 
 [![Terraform](https://img.shields.io/badge/Terraform-v1.0+-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-v2.9+-EE0000?logo=ansible&logoColor=white)](https://www.ansible.com/)
@@ -28,11 +28,11 @@
 
 ## 🎯 Tổng quan
 
-Dự án triển khai một hệ thống hạ tầng **AWS 2-tier** hoàn chỉnh sử dụng **Infrastructure as Code (IaC)** với Terraform và Ansible, bao gồm:
+Dự án triển khai một hệ thống hạ tầng **AWS 3-tier** hoàn chỉnh sử dụng **Infrastructure as Code (IaC)** với Terraform và Ansible, bao gồm:
 
-1. **Web Tier (Public)** — H&M Clothing Store (React + Node.js + MySQL), truy cập qua Application Load Balancer
-2. **App Tier (Private)** — AI Agent RCA (LangGraph + AWS Bedrock + FastAPI), nhận alarm từ CloudWatch qua SNS webhook, truy cập nội bộ qua SSM Port Forwarding
-3. **Database Tier** — RDS MySQL với automated backups
+1. **Web Tier (Public) — Layer 1:** H&M Clothing Store (React + Node.js), truy cập public thông qua Application Load Balancer (ALB).
+2. **App Tier (Private) — Layer 2:** AI Agent RCA (LangGraph + AWS Bedrock + FastAPI), nhận các cảnh báo (alarms) thời gian thực từ CloudWatch qua SNS webhook, truy cập nội bộ (private) thông qua cơ chế AWS SSM Port Forwarding.
+3. **Database Tier (Private & Isolated) — Layer 3:** Hệ thống cơ sở dữ liệu RDS MySQL 8.0, được cấu hình cô lập hoàn toàn (Private Subnets, không có route ra Internet hay NAT Gateway), chỉ chấp nhận các kết nối Inbound MySQL từ Layer 1 Web App và chặn hoàn toàn mọi traffic Outbound (Egress).
 
 Hệ thống tích hợp **AI-powered Root Cause Analysis Agent** — một agent tự chủ sử dụng LangGraph với investigation loop theo phương pháp khoa học, tự động nhận CloudWatch Alarms, truy vấn log, đặt giả thuyết, kiểm chứng, và tạo báo cáo RCA toàn diện kèm remediation actions.
 

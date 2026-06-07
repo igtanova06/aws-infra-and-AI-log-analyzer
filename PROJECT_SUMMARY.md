@@ -2,11 +2,11 @@
 
 ## 🎯 Tổng quan
 
-Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với kiến trúc 2-tier:
+Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với kiến trúc 3-tier:
 
 ### **Layer 1 — Web Tier (Public)**
 - **Ứng dụng**: H&M Clothing Store
-- **Công nghệ**: React 18 + Tailwind CSS + Node.js Express + MySQL
+- **Công nghệ**: React 18 + Tailwind CSS + Node.js Express
 - **Truy cập**: Public qua ALB
 - **Port**: 8080 (internal), 80 (ALB)
 
@@ -15,6 +15,11 @@ Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với ki�
 - **Công nghệ**: Python + LangGraph + LangChain + FastAPI + AWS Bedrock
 - **Truy cập**: Private qua SSM Port Forwarding
 - **Port**: 8000 (FastAPI)
+
+### **Layer 3 — Database Tier (Private & Isolated)**
+- **Dịch vụ**: RDS MySQL 8.0
+- **Truy cập**: Chỉ cho phép inbound từ Layer 1 Web App Security Group (Port 3306). Chặn hoàn toàn mọi kết nối outbound (Egress Deny).
+- **Định tuyến**: Nằm trong các DB subnets cô lập hoàn toàn, không có route ra Internet hay NAT Gateway.
 
 ---
 

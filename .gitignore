@@ -46,3 +46,6 @@ logs/
 # Node.js
 node_modules/
 dist/
+
+# Local docs
+AI_AGENT_RCA_ARCHITECTURE.md

@@ -25,4 +25,4 @@ def get_model_by_phase(phase: str):
         "region_name": region,
         "model_kwargs": {"temperature": temperature}
     }
-    return ChatBedrock(**kwargs)
+    return ChatBedrock(**kwargs)  # type: ignore

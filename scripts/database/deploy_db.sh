@@ -27,7 +27,7 @@ echo "✅ Connection successful!"
 # Deploy schema
 echo ""
 echo "📦 Deploying database schema..."
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" < ../../Web-Project-1/database/complete_setup.sql
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" < ../../hm-store/database/complete_setup.sql
 
 echo ""
 echo "✅ Database deployment complete!"
@@ -37,17 +37,16 @@ mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" -e "
 USE qlsv_system;
 SELECT 'Users' as Table_Name, COUNT(*) as Count FROM users
 UNION ALL
-SELECT 'Students', COUNT(*) FROM students
+SELECT 'Categories', COUNT(*) FROM categories
 UNION ALL
-SELECT 'Classes', COUNT(*) FROM classes
+SELECT 'Products', COUNT(*) FROM products
 UNION ALL
-SELECT 'Enrollments', COUNT(*) FROM enrollments
+SELECT 'Orders', COUNT(*) FROM orders
 UNION ALL
-SELECT 'Grades', COUNT(*) FROM grades;
+SELECT 'Order Items', COUNT(*) FROM order_items;
 "
 
 echo ""
 echo "🔐 Default Accounts:"
 echo "  Admin: admin / 123@"
-echo "  Lecturers: gv01, gv02, gv03 / 123@"
-echo "  Students: sv01-sv10 / 123@"
+echo "  Customers: customer01, customer02, customer03 / 123@"

@@ -5,8 +5,8 @@
 Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với kiến trúc 2-tier:
 
 ### **Layer 1 - Web Tier (Public)**
-- **Ứng dụng**: QLSV (Quản Lý Sinh Viên)
-- **Công nghệ**: PHP + MySQL
+- **Ứng dụng**: H&M Clothing Store
+- **Công nghệ**: React + Node.js (Express) + MySQL
 - **Truy cập**: Public qua ALB
 - **Port**: 8080 (internal), 80 (ALB)
 
@@ -55,8 +55,8 @@ Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với ki�
 
 **Web Tier:**
 3. `/aws/ec2/web-tier/system` - System logs
-4. `/aws/ec2/web-tier/httpd` - Apache logs
-5. `/aws/ec2/web-tier/application` - PHP logs
+4. `/aws/ec2/web-tier/httpd` - Apache-format container access logs
+5. `/aws/ec2/web-tier/application` - Node.js Express application logs
 
 **App Tier:**
 6. `/aws/ec2/app-tier/system` - System logs
@@ -70,22 +70,22 @@ Hệ thống bao gồm 2 ứng dụng chính được deploy trên AWS với ki�
 
 ## 📦 Ứng dụng
 
-### 1. QLSV - Student Management System
+### 1. H&M Clothing Store Storefront
 
 **Tính năng:**
-- Quản lý sinh viên, giảng viên, lớp học
-- Đăng ký môn học
-- Quản lý điểm số
-- 3 roles: Admin, Lecturer, Student
+- Duyệt và tìm kiếm quần áo thời trang theo danh mục
+- Quản lý giỏ hàng trực quan và đặt hàng thực tế
+- Hỗ trợ giao diện giả lập (RCA Developer Simulator) cho phép trigger các log lỗi / bảo mật để kiểm thử AI Agent RCA
+- 2 roles: Admin, Customer
 
 **Database:**
-- 6 tables: roles, users, classes, students, enrollments, grades
-- 14 default accounts (1 admin, 3 lecturers, 10 students)
-- Password: SHA256 hashing
+- 6 tables: roles, users, categories, products, orders, order_items
+- 4 default accounts (1 admin, 3 customers)
+- Password: SHA256 hashing (salt: `_salt`)
 
 **Truy cập:**
 ```
-URL: http://<ALB-DNS>/qlsv
+URL: http://<ALB-DNS>/
 Login: admin / 123@
 ```
 
@@ -167,7 +167,7 @@ ansible-playbook -i inventory/aws_ec2.yml playbooks/site.yml
 **Deploy:**
 - CloudWatch Agent
 - Docker
-- Web App (QLSV)
+- Web App (H&M Clothing Store)
 - Log Analyzer (Streamlit)
 
 ### 5. Verification (2-3 phút)
@@ -317,7 +317,7 @@ mysql -h <db-endpoint> -u admin -p
 - `PROJECT_SUMMARY.md` - Tổng quan project (file này)
 
 ### Application Docs
-- `Web-Project-1/README.md` - QLSV documentation
+- `hm-store/README.md` - H&M Store documentation
 - `AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui/README.md` - AI Analyzer docs
 
 ### Infrastructure Docs
@@ -342,7 +342,7 @@ mysql -h <db-endpoint> -u admin -p
 - [x] CloudTrail
 
 **Applications:**
-- [x] Web QLSV (PHP)
+- [x] Web H&M Store (React + Node.js)
 - [x] AI Log Analyzer (Streamlit)
 - [x] Database schema
 - [x] CloudWatch Agent
@@ -401,7 +401,7 @@ mysql -h <db-endpoint> -u admin -p
 - IAM Roles: ✅
 
 ### Applications: ✅ READY
-- Web QLSV: ✅
+- H&M Clothing Store: ✅
 - AI Log Analyzer: ✅
 - Database Schema: ✅
 - CloudWatch Agent: ✅

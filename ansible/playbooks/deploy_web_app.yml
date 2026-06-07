@@ -25,14 +25,14 @@
         group: ec2-user
         mode: '0755'
 
-    - name: Copy PHP source code to remote host
+    - name: Copy H&M source code to remote host
       copy:
-        src: "../../Web-Project-1/"
+        src: "../../hm-store/"
         dest: "/home/ec2-user/{{ app_name }}/"
         owner: ec2-user
         group: ec2-user
 
-    - name: Build PHP Docker image
+    - name: Build H&M React/Express Docker image
       community.docker.docker_image:
         name: "{{ app_name }}"
         build:
@@ -42,7 +42,7 @@
       async: 900
       poll: 10
 
-    - name: Run PHP Web App container with logging
+    - name: Run H&M Web App container with logging
       community.docker.docker_container:
         name: "{{ app_name }}"
         image: "{{ app_name }}:latest"
@@ -58,21 +58,11 @@
           max-size: "10m"
           max-file: "3"
         env:
-          PHP_ERROR_LOG: "/var/log/app/php-error.log"
           APP_LOG_FILE: "/var/log/app/application.log"
-          # Lệnh lookup tìm vào SSM lấy password
           DB_HOST: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/host') }}"
           DB_USER: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/user') }}"
           DB_PASS: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/password') }}"
           DB_NAME: "{{ lookup('amazon.aws.ssm_parameter', '/qlsv/dev/db/name') }}"
-
-
-    - name: Configure PHP error logging in container
-      shell: |
-        docker exec {{ app_name }} bash -c "echo 'error_log = /var/log/app/php-error.log' >> /usr/local/etc/php/php.ini" || true
-        docker exec {{ app_name }} bash -c "echo 'log_errors = On' >> /usr/local/etc/php/php.ini" || true
-        docker restart {{ app_name }}
-      ignore_errors: yes
 
     - name: Create application log file
       file:

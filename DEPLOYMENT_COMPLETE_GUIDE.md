@@ -15,13 +15,13 @@
 ## 🏗️ TỔNG QUAN KIẾN TRÚC
 
 ### **Layer 1 - Web Tier (Public Access via ALB)**
-- **Ứng dụng**: Web QLSV (PHP)
-- **Truy cập**: `http://<ALB-DNS-NAME>/qlsv`
+- **Ứng dụng**: H&M Clothing Store (React + Node.js)
+- **Truy cập**: `http://<ALB-DNS-NAME>/`
 - **Port**: 8080 (internal), 80 (ALB)
 - **Log Groups**:
   - `/aws/ec2/web-tier/system` - System logs (messages, secure)
-  - `/aws/ec2/web-tier/httpd` - Apache logs (access, error)
-  - `/aws/ec2/web-tier/application` - PHP application logs
+  - `/aws/ec2/web-tier/httpd` - Apache-format access logs from Node container stdout
+  - `/aws/ec2/web-tier/application` - Node.js Express application logs
 
 ### **Layer 2 - App Tier (Private - SSM Access Only)**
 - **Ứng dụng**: AI Log Analyzer (Streamlit)
@@ -173,7 +173,7 @@ echo "✅ Connection successful!"
 # Deploy schema
 echo ""
 echo "📦 Deploying database schema..."
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" < ../../Web-Project-1/database/complete_setup.sql
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" < ../../hm-store/database/complete_setup.sql
 
 echo ""
 echo "✅ Database deployment complete!"
@@ -183,20 +183,19 @@ mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" -e "
 USE qlsv_system;
 SELECT 'Users' as Table_Name, COUNT(*) as Count FROM users
 UNION ALL
-SELECT 'Students', COUNT(*) FROM students
+SELECT 'Categories', COUNT(*) FROM categories
 UNION ALL
-SELECT 'Classes', COUNT(*) FROM classes
+SELECT 'Products', COUNT(*) FROM products
 UNION ALL
-SELECT 'Enrollments', COUNT(*) FROM enrollments
+SELECT 'Orders', COUNT(*) FROM orders
 UNION ALL
-SELECT 'Grades', COUNT(*) FROM grades;
+SELECT 'Order Items', COUNT(*) FROM order_items;
 "
 
 echo ""
 echo "🔐 Default Accounts:"
 echo "  Admin: admin / 123@"
-echo "  Lecturers: gv01, gv02, gv03 / 123@"
-echo "  Students: sv01-sv10 / 123@"
+echo "  Customers: customer01, customer02, customer03 / 123@"
 ```
 
 ### Bước 2: Chạy deployment
@@ -444,23 +443,22 @@ aws rds modify-db-instance \
 
 ## 🌐 TRUY CẬP ỨNG DỤNG
 
-### Layer 1 - Web QLSV (Public)
+### Layer 1 - H&M Clothing Store (Public)
 ```bash
 # Lấy ALB DNS
 ALB_DNS=$(cd environments/dev && terraform output -raw alb_dns_name)
 
-echo "🌐 Web QLSV: http://$ALB_DNS/qlsv"
+echo "🌐 H&M Clothing Store: http://$ALB_DNS/"
 
 # Test
-curl -I http://$ALB_DNS/qlsv
+curl -I http://$ALB_DNS/
 ```
 
-**Truy cập**: Mở browser → `http://<ALB-DNS>/qlsv`
+**Truy cập**: Mở browser → `http://<ALB-DNS>/`
 
 **Tài khoản mặc định**:
 - Admin: `admin` / `123@`
-- Giảng viên: `gv01` / `123@`
-- Sinh viên: `sv01` / `123@`
+- Customers: `customer01`, `customer02`, `customer03` / `123@`
 
 ### Layer 2 - AI Log Analyzer (Private - SSM)
 ```bash

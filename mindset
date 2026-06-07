@@ -1,0 +1,254 @@
+Terraform Series (4/4). Bài trước giúp bạn thành DevOps. Bài này giúp bạn thành DevOps Lead.
+
+
+Ba phần trước giúp bạn viết được Terraform. Phần này giúp bạn review được Terraform của người khác.
+
+
+Bài 3
+https://www.facebook.com/.../permalink/1917750832946649/
+Bài 2
+https://www.facebook.com/groups/vietnamawsexamprep/permalink/1908274490560950/
+Bài 1
+https://www.facebook.com/.../permalink/1903148147740251/
+Lead khác member không phải ở số tool biết, mà ở mindset. Bạn vừa lên lead. Member mở PR. Bạn review. Cú pháp thì AI đã lo. Logic thì coworker detect được. Vậy lead xem gì?
+
+
+MINDSET 1: Code chạy đúng là chưa đủ. Lead review tính maintain.
+
+
+Cú pháp đúng thì AI lo rồi. Logic đúng thì coworker bắt được. Nhưng code có dễ maintain không, có scale được không, 6 tháng sau người mới vào đọc có hiểu không. Đó mới là thứ lead cần bắt.
+
+
+Châm ngôn giữ tính maintain: giảm thiểu tối đa logic trong code (ternary, count, conditional). Dùng data càng nhiều càng tốt (map, locals, data source). Logic ít thì ít chỗ sai. Data nhiều thì dễ đọc, dễ thêm, dễ sửa. Người mới vào nhìn map là hiểu, nhìn 5 tầng ternary lồng nhau thì bỏ việc.
+
+
+Map thay ternary. Member viết: instance_type = var.env == "prod" ? "m5.xlarge" : "t3.micro". Một cái thì ổn. Nhưng file có 15 cái ternary thì 6 tháng sau thêm env staging phải sửa 15 chỗ. Lead bắt đổi sang map:
+
+
+locals {
+⠀⠀instance_types = {
+⠀⠀⠀⠀dev⠀⠀⠀⠀= "t3.micro"
+⠀⠀⠀⠀staging = "t3.small"
+⠀⠀⠀⠀prod⠀⠀⠀= "m5.xlarge"
+⠀⠀}
+}
+
+
+instance_type = local.instance_types[var.env]
+
+
+Thêm env? Thêm một dòng. Không sửa logic. Không ai quên sót.
+
+
+Variable hay Local? Newbie thường nhét hết vào variable. Name prefix, tag combinations, instance_type, region. File variables.tf phình ra 200 dòng, file tfvars cũng 200 dòng, mỗi lần thêm env phải copy paste cả đống.
+
+
+Nguyên tắc: càng ít variable càng tốt. Lý tưởng nhất là chỉ có một variable duy nhất: env. Tất cả phần còn lại (region, instance_type, CIDR, replica count) nằm trong local map, tra theo env. Terraform tự tính, không ai phải truyền, không ai truyền sai, không ai quên.
+
+
+Variable chỉ dành cho thứ thực sự thay đổi từ bên ngoài mà không suy ra được từ env. Ví dụ: tên project (vì một repo có thể dùng cho nhiều project). Ngoài ra, hầu hết nên là local.
+
+
+Sai: variable "name_prefix" rồi truyền "myapp-dev" từ tfvars.
+Đúng: local.name_prefix = "${var.project}-${var.env}"
+
+
+Local tính tự động, không ai quên truyền, không ai truyền sai.
+
+
+Hardcode AZ và AMI. Newbie ghi thẳng "us-east-1a" trong code. Nhưng AZ mapping khác nhau giữa các AWS account. us-east-1a của bạn có thể là datacenter khác với us-east-1a của tôi. Dùng data.aws_availability_zones để lấy dynamic. Tương tự, AMI ID ghi cứng sẽ stale và khác giữa region. Dùng data.aws_ami với filter.
+
+
+for_each thay count. Ví dụ bạn tạo 3 subnet bằng count: subnet[0], subnet[1], subnet[2]. Giờ xóa subnet[1] ở giữa. Terraform không hiểu "xóa cái giữa". Nó thấy danh sách còn 2, nên nó xóa subnet[2] (cái cuối) rồi đổi tên subnet[2] cũ thành subnet[1]. Kết quả: subnet bạn muốn giữ bị xóa, subnet bạn muốn xóa thì bị đổi tên. Dùng for_each thì mỗi resource có tên riêng (for_each = {"public" = ..., "private" = ...}). Xóa "public" thì chỉ "public" bị xóa. "private" không bị đụng.
+
+
+Lifecycle rules cho resource quan trọng. Database, S3 bucket có dữ liệu, DynamoDB table production. Không có prevent_destroy thì một lần refactor tên resource là Terraform xóa rồi tạo lại. Dữ liệu mất sạch. create_before_destroy cho zero-downtime. ignore_changes cho thuộc tính managed bởi autoscaling.
+
+
+Sensitive variables. Member tạo variable cho database password mà không đánh dấu sensitive = true. Password hiện ra trong plan output, trong CI log, ai cũng đọc được.
+
+
+MINDSET 2: Đặt tên resource như đặt tên đường. Ai nhìn cũng biết đang ở đâu.
+
+
+Trên AWS, resource name nên encode đủ thông tin: env, region, project. Nhìn vào console biết ngay resource thuộc đâu.
+
+
+Cú pháp: {project}-{env}-{region_short}-{resource}-{descriptor}
+
+
+Ví dụ: acme-prod-apse1-alb-public. acme-dev-use1-rds-primary. acme-staging-euw1-s3-logs.
+
+
+Region viết tắt: us-east-1 thành use1. ap-southeast-1 thành apse1.
+
+
+Trong Terraform, dùng local:
+
+
+locals {
+⠀⠀name_prefix = "${var.project}-${var.env}-${var.region_short}"
+}
+
+
+Mọi resource dùng: name = "${local.name_prefix}-alb-public"
+
+
+Đồng bộ tags bằng default_tags ở provider level. Tất cả resource tự động có tags Environment, Project, ManagedBy, Owner. Không ai quên gắn.
+
+
+Nguồn: AWS Tagging Best Practices (https://docs.aws.amazon.com/whitepapers/latest/tagging-best-practices/tagging-best-practices.html)
+
+
+MINDSET 3: Ghim version và theo dõi lỗ hổng bảo mật. Việc của lead, không phải member.
+
+
+Member thường để version provider trống hoặc dùng >=. Mỗi lần terraform init có thể kéo version khác nhau. Lead enforce version = "~> 5.0" cho provider, required_version = "~> 1.5" cho binary. Upgrade có kiểm soát.
+
+
+Quan trọng hơn: lead theo dõi security advisory và chia sẻ cho team. Năm 2024, thư viện go-getter mà Terraform dùng để tải module bị phát hiện lỗ hổng command injection qua Git URL (CVE-2024-6257). Team không cập nhật thì có thể bị tấn công khi dùng module từ nguồn ngoài.
+
+
+Nguồn chất lượng lead cần follow:
+
+
+HashiCorp Security: https://discuss.hashicorp.com/c/security/10
+AWS Provider Changelog: https://github.com/hashicorp/terraform-provider-aws/releases
+GitHub Advisory Database: https://github.com/advisories?query=terraform
+CVE Database: https://nvd.nist.gov/vuln/search/results?query=terraform
+Terraform Weekly Newsletter: https://www.yourweeklyterraform.com/
+
+
+Scan bảo mật tự động trong pipeline: Checkov (https://www.checkov.io/), Trivy (https://github.com/aquasecurity/trivy). Không qua scan thì không merge.
+
+
+MINDSET 4: Thiết kế cấu trúc dự án. Lead quyết, sai từ đầu thì refactor tốn gấp 10.
+
+
+Workspace: tránh xa. Official feature nhưng không phải best practice.
+
+
+Nhiều bạn mới học đọc doc thấy workspace rồi dùng luôn. Workspace cho phép một bộ code dùng chung nhiều state. Gõ "terraform workspace new prod", dùng chung code, chỉ đổi state.
+
+
+Nhưng đây chính là vấn đề.
+
+
+Sai một lệnh là phá sai env. Đang ở workspace dev, quên select sang prod, chạy apply. Dev plan nhưng apply lên prod. Bình luận được vote cao nhất trên r/Terraform: "Gõ nhầm workspace select rồi apply có thể phá sai môi trường. Và bạn sẽ không nhận ra cho đến khi quá muộn."
+
+
+Code đầy ternary logic. Dev và prod cần khác nhau, bạn viết: count = terraform.workspace == "prod" ? 3 : 1. File .tf dần biến thành mớ if-else. Dùng map cũng cứu không nổi khi logic workspace lan khắp nơi.
+
+
+Chung backend. Workspace dùng chung backend, chung credential. Prod thường cần account AWS riêng, S3 riêng, IAM riêng. Workspace không hỗ trợ.
+
+
+Chính documentation của HashiCorp cũng viết: workspace không phù hợp cho tách env khi backend cần khác nhau.
+
+
+Per-directory environments: ưu tiên số 1
+
+
+Thay vì workspace, dùng per-directory. Tách thư mục riêng cho mỗi env.
+
+
+infrastructure/
+├── modules/
+│⠀⠀├── networking/
+│⠀⠀└── compute/
+└── environments/
+⠀⠀⠀├── dev/
+⠀⠀⠀│⠀⠀├── main.tf
+⠀⠀⠀│⠀⠀├── backend.tf (S3 bucket riêng)
+⠀⠀⠀│⠀⠀└── dev.tfvars
+⠀⠀⠀└── prod/
+⠀⠀⠀⠀⠀⠀├── main.tf
+⠀⠀⠀⠀⠀⠀├── backend.tf (S3 bucket riêng)
+⠀⠀⠀⠀⠀⠀└── prod.tfvars
+
+
+Tại sao tốt hơn? Đang ở thư mục dev thì chỉ apply được dev. Không thể apply nhầm prod. Mỗi env backend riêng, state riêng, IAM riêng. Code sạch, khác biệt nằm trong tfvars. PR chỉ thay đổi trong thư mục dev thì reviewer biết ngay scope.
+
+
+Hierarchical directory: mở rộng multi-region, multi-service
+
+
+infrastructure/
+└── environments/
+⠀⠀⠀├── dev/
+⠀⠀⠀│⠀⠀└── ap-southeast-1/
+⠀⠀⠀│⠀⠀⠀⠀⠀├── vpc/
+⠀⠀⠀│⠀⠀⠀⠀⠀├── app/
+⠀⠀⠀│⠀⠀⠀⠀⠀└── database/
+⠀⠀⠀└── prod/
+⠀⠀⠀⠀⠀⠀├── ap-southeast-1/
+⠀⠀⠀⠀⠀⠀│⠀⠀├── vpc/
+⠀⠀⠀⠀⠀⠀│⠀⠀└── app/
+⠀⠀⠀⠀⠀⠀└── us-east-1/
+⠀⠀⠀⠀⠀⠀⠀⠀⠀├── vpc/
+⠀⠀⠀⠀⠀⠀⠀⠀⠀└── app/
+
+
+Mỗi service, mỗi region, mỗi env là một state riêng. Blast radius nhỏ nhất. Lỗi ở vpc dev ap-southeast-1 không ảnh hưởng database prod us-east-1. Dùng Terragrunt thì config kế thừa từ thư mục cha, không duplicate.
+
+
+Tách theo service: cách các công ty lớn làm
+
+
+Có một team trên Reddit r/devops chia sẻ họ quản lý 1.500 repo Terraform riêng biệt. Mỗi service một repo. Shared GitHub Actions workflow lo phần plan và apply. Slack cũng tương tự: tách state theo service, không gom chung (https://slack.engineering/how-we-use-terraform-at-slack/).
+
+
+Không phải team nào cũng cần 1.500 repo. Nhưng nguyên tắc giống nhau: tách nhỏ, giảm blast radius, mỗi team tự quản lý hạ tầng của service mình.
+
+
+Tóm lại: workspace cho demo. Per-directory cho dự án thật. Hierarchical cho tổ chức lớn. Tách theo service cho microservices.
+
+
+MINDSET 5: Thiết kế vận hành. Pipeline linh hoạt theo team size nhưng có những điểm không thỏa hiệp.
+
+
+Team 3 người hay team 30 người, pipeline có thể khác nhau. Nhưng những điểm sau luôn phải có:
+
+
+terraform fmt check trên mỗi PR. Code không format đúng thì không merge. Không tranh luận style.
+
+
+terraform plan output đăng trên PR. Cả team thấy resource nào tạo, sửa, xóa. Không ai apply mù.
+
+
+Security scan (Checkov/Trivy) trước khi merge. Lỗ hổng bảo mật bắt sớm.
+
+
+Manual approve cho production. Pipeline chạy plan xong dừng lại. Người có quyền review plan rồi bấm Approve. Một lệnh apply sai xóa database trong 3 giây. Đây là hàng rào cuối cùng.
+
+
+State luôn trên remote backend có lock. S3 + DynamoDB trên AWS. Không bao giờ local state khi làm team.
+
+
+Infracost ước tính chi phí trên PR. Member tạo 5 NAT Gateway mà không biết mỗi cái tốn 32 đô/tháng. Lead nhìn Infracost output là biết ngay.
+
+
+Team 3 người: GitHub Actions + S3 backend + manual approve. Team 20 người: Terragrunt + Spacelift hoặc Env0. Nhưng 6 điểm trên không đổi.
+
+
+Đây là bài cuối series Terraform. 4 phần giúp bạn có bức tranh tổng thể: từ khái niệm IaC, qua 3 trụ cột (State/Provider/Backend), 7 building block, đến mindset của người lead một team Terraform. Chia sẻ cho bạn bè đang học cloud nhé.
+
+TERRAFORM — Infrastructure provisioning
+✅ Bước 1: Provider + Backend
+✅ Bước 2: VPC & Networking
+✅ Bước 3: Security Groups
+✅ Bước 4: Compute (EC2 / ASG)
+⬜ Bước 5: Load Balancer (ALB)
+⬜ Bước 6: Database (RDS)
+⬜ Bước 7: IAM Roles & Policies
+⬜ Bước 8: Outputs
+
+──────────────────────────────────
+
+ANSIBLE — Configuration management
+⬜ Bước 9:  Inventory (dynamic từ AWS)
+⬜ Bước 10: Install dependencies (nginx, docker, etc.)
+⬜ Bước 11: Deploy application
+⬜ Bước 12: Config management (env vars, secrets)
+
+

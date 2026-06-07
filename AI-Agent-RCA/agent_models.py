@@ -21,7 +21,7 @@ def get_model_by_phase(phase: str):
         temperature = 0.0
         
     return ChatBedrock(
-        model_id=model_id,
         region_name=region,
-        model_kwargs={"temperature": temperature}
+        model_kwargs={"temperature": temperature},
+        **{"model_id": model_id}
     )

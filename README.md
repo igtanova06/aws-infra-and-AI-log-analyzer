@@ -1,12 +1,12 @@
-# 🏗️ AWS Infrastructure & AI Log Analyzer
+# 🏗️ AWS Infrastructure & AI-Powered RCA Agent
 
-> **Hệ thống hạ tầng AWS 3-tier với AI-powered Security Log Analysis**
+> **Hệ thống hạ tầng AWS 2-tier với AI Agent tự động phân tích nguyên nhân gốc rễ (Root Cause Analysis)**
 
 [![Terraform](https://img.shields.io/badge/Terraform-v1.0+-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-v2.9+-EE0000?logo=ansible&logoColor=white)](https://www.ansible.com/)
 [![AWS](https://img.shields.io/badge/AWS-ap--southeast--1-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agent_Framework-1C3C3C)](https://langchain-ai.github.io/langgraph/)
 [![Bedrock](https://img.shields.io/badge/AWS_Bedrock-Claude_AI-4B0082)](https://aws.amazon.com/bedrock/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-v1.x-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 
 ---
 
@@ -17,26 +17,24 @@
 - [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
 - [Cấu trúc project](#-cấu-trúc-project)
 - [Ứng dụng](#-ứng-dụng)
+- [AI Agent RCA](#-ai-agent-rca)
 - [Log Collection & Observability](#-log-collection--observability)
-- [AI Log Analysis Pipeline](#-ai-log-analysis-pipeline)
 - [Hướng dẫn Deploy](#-hướng-dẫn-deploy)
 - [Truy cập ứng dụng](#-truy-cập-ứng-dụng)
 - [Chi phí ước tính](#-chi-phí-ước-tính)
 - [Bảo mật](#-bảo-mật)
-- [Troubleshooting](#-troubleshooting)
-- [Tài liệu tham khảo](#-tài-liệu-tham-khảo)
 
 ---
 
 ## 🎯 Tổng quan
 
-Dự án triển khai một hệ thống hạ tầng **AWS 3-tier** hoàn chỉnh sử dụng **Infrastructure as Code (IaC)** với Terraform và Ansible, bao gồm:
+Dự án triển khai một hệ thống hạ tầng **AWS 2-tier** hoàn chỉnh sử dụng **Infrastructure as Code (IaC)** với Terraform và Ansible, bao gồm:
 
-1. **Web Tier (Public)** — Ứng dụng Quản Lý Sinh Viên (QLSV) bằng PHP + MySQL, truy cập qua Application Load Balancer
-2. **App Tier (Private)** — AI Log Analyzer bằng Python + Streamlit + AWS Bedrock, truy cập nội bộ qua SSM Port Forwarding
-3. **Database Tier** — RDS MySQL Multi-AZ với automated backups
+1. **Web Tier (Public)** — H&M Clothing Store (React + Node.js + MySQL), truy cập qua Application Load Balancer
+2. **App Tier (Private)** — AI Agent RCA (LangGraph + AWS Bedrock + FastAPI), nhận alarm từ CloudWatch qua SNS webhook, truy cập nội bộ qua SSM Port Forwarding
+3. **Database Tier** — RDS MySQL với automated backups
 
-Hệ thống tích hợp **AI-powered security log analysis** tự động phân tích 9 CloudWatch Log Groups mỗi 5 phút, phát hiện tấn công, phân tích nguyên nhân gốc rễ (Root Cause Analysis) và gửi cảnh báo qua Telegram.
+Hệ thống tích hợp **AI-powered Root Cause Analysis Agent** — một agent tự chủ sử dụng LangGraph với investigation loop theo phương pháp khoa học, tự động nhận CloudWatch Alarms, truy vấn log, đặt giả thuyết, kiểm chứng, và tạo báo cáo RCA toàn diện kèm remediation actions.
 
 ---
 
@@ -60,32 +58,33 @@ Hệ thống tích hợp **AI-powered security log analysis** tự động phân
         │                      │                       │
    ┌────┴─────────────────┐  ┌─┴───────────────────┐  │
    │  WEB TIER (Public)   │  │  WEB TIER (Public)  │  │
-   │  EC2 - PHP + MySQL   │  │  EC2 - PHP + MySQL  │  │
-   │  Auto Scaling Group  │  │  Auto Scaling Group  │  │
+   │  H&M Store           │  │  H&M Store          │  │
+   │  React + Node.js     │  │  React + Node.js    │  │
    └──────────────────────┘  └─────────────────────┘  │
                                                        │
    ┌──────────────────────┐  ┌─────────────────────┐  │
    │  APP TIER (Private)  │  │  APP TIER (Private) │  │
-   │  EC2 - Streamlit     │  │  EC2 - Streamlit    │  │
-   │  Auto Scaling Group  │  │  Auto Scaling Group  │  │
+   │  AI Agent RCA        │  │  AI Agent RCA       │  │
+   │  LangGraph + FastAPI │  │  LangGraph + FastAPI│  │
    └──────────────────────┘  └─────────────────────┘  │
                                                        │
    ┌──────────────────────┐  ┌─────────────────────┐  │
    │  DB TIER (Private)   │  │  DB TIER (Standby)  │  │
-   │  RDS MySQL Primary   │◄─┤  RDS Read Replica   │  │
+   │  RDS MySQL Primary   │◄─┤  RDS MySQL          │  │
    └──────────────────────┘  └─────────────────────┘  │
         └──────────────────────────────────────────────┘
 
    ┌─────────────────────────────────────────────────────┐
-   │              LOG COLLECTION & AI ANALYSIS            │
+   │           EVENT-DRIVEN AI INVESTIGATION             │
    │                                                      │
-   │  VPC Flow Logs ──┐                                   │
-   │  CloudTrail ─────┤                                   │
-   │  Web Tier Logs ──┤──► CloudWatch ──► AI Analyzer     │
-   │  App Tier Logs ──┤       Logs         (Bedrock)      │
-   │  RDS Logs ───────┘                      │             │
-   │                                         ▼             │
-   │                                   Telegram Alerts     │
+   │  CloudWatch Alarms ──► SNS ──► Webhook (FastAPI)    │
+   │                                      │               │
+   │                               LangGraph Agent        │
+   │                          (Hypothesis → Tool → RCA)   │
+   │                                      │               │
+   │                                      ▼               │
+   │                            Telegram Alerts           │
+   │                          + Incident Reports          │
    └─────────────────────────────────────────────────────┘
 ```
 
@@ -93,10 +92,11 @@ Hệ thống tích hợp **AI-powered security log analysis** tự động phân
 
 | Tiêu chí | Chi tiết |
 |-----------|----------|
-| **High Availability** | Deploy trên 2 Availability Zones, Auto Scaling Groups, RDS Multi-AZ |
-| **Security** | Private subnets cho App & DB, không public IP, IAM roles, Security Groups & NACLs |
-| **Access** | Web tier qua ALB, Streamlit UI qua SSM Port Forwarding (không public exposure) |
-| **Observability** | 9 CloudWatch Log Groups, VPC Flow Logs, CloudTrail, AI-powered analysis |
+| **High Availability** | Deploy trên 2 Availability Zones, Auto Scaling Groups |
+| **Security** | Private subnets cho App & DB, không public IP, IAM roles, Security Groups |
+| **Access** | Web tier qua ALB, AI Agent qua SSM Port Forwarding (không public exposure) |
+| **Observability** | 9 CloudWatch Log Groups, VPC Flow Logs, CloudTrail |
+| **AI Architecture** | LangGraph ReAct agent với context engineering, YAML-based prompt management |
 
 ---
 
@@ -110,12 +110,14 @@ Hệ thống tích hợp **AI-powered security log analysis** tự động phân
 | **Compute** | EC2 (t3.micro), Auto Scaling Groups |
 | **Database** | RDS MySQL 8.0 |
 | **Load Balancing** | Application Load Balancer |
-| **Web Application** | PHP + Apache (Docker) |
-| **AI Application** | Python + Streamlit (Docker) |
+| **Web Application** | React 18 + Node.js Express (Docker) |
+| **AI Agent Framework** | LangGraph (StateGraph ReAct loop) |
 | **AI/ML** | AWS Bedrock (Claude 3 Haiku / Sonnet) |
-| **Monitoring** | CloudWatch Logs, VPC Flow Logs, CloudTrail |
-| **Alerting** | Telegram Bot API |
-| **Container** | Docker + supervisord |
+| **AI API** | FastAPI (webhook receiver) |
+| **Context Engineering** | YAML-based composable prompt system |
+| **Monitoring** | CloudWatch Logs + Alarms, VPC Flow Logs, CloudTrail |
+| **Alerting** | Telegram Bot API (via SNS → webhook chain) |
+| **Container** | Docker (multi-stage builds) |
 | **Access Management** | AWS SSM Session Manager |
 
 ---
@@ -133,7 +135,7 @@ terraform-for-project1/
 │       ├── alb.tf                # Application Load Balancer
 │       ├── security_groups.tf    # Security Groups
 │       ├── iam.tf                # IAM Roles & Policies
-│       ├── cloudwatch.tf         # CloudWatch Log Groups
+│       ├── cloudwatch.tf         # CloudWatch Log Groups & Alarms
 │       ├── cloudtrail.tf         # CloudTrail
 │       ├── variables.tf          # Input variables
 │       ├── outputs.tf            # Output values
@@ -154,32 +156,47 @@ terraform-for-project1/
 │   ├── roles/                    # Ansible roles
 │   └── templates/                # Jinja2 templates
 │
-├── 📂 Web-Project-1/             # QLSV - Student Management System
-│   ├── index.php                 # Entry point
-│   ├── admin/                    # Admin panel
-│   ├── lecturer/                 # Lecturer module
-│   ├── student/                  # Student module
-│   ├── api/                      # REST API
-│   ├── database/                 # SQL schemas
-│   └── Dockerfile
+├── 📂 hm-store/                  # H&M Clothing Store (Web Tier)
+│   ├── backend/
+│   │   └── src/
+│   │       ├── index.js          # Express API + HTTP access logger
+│   │       └── db.js             # MySQL connection pool
+│   ├── frontend/
+│   │   └── src/
+│   │       ├── App.jsx           # React E-commerce UI
+│   │       ├── index.css         # Tailwind + custom styling
+│   │       └── main.jsx          # React entrypoint
+│   ├── database/
+│   │   └── complete_setup.sql    # Full schema + seed data
+│   └── Dockerfile                # Multi-stage Docker build
 │
-├── 📂 AI_Log_Analysis-Project-1/
-│   └── bedrock-log-analyzer-ui/  # AI Log Analyzer Application
-│       ├── streamlit_app.py      # Main Streamlit UI
-│       ├── auto_analyzer.py      # Automated cron-based analyzer
-│       ├── cloudwatch_client.py  # CloudWatch Logs client
-│       ├── incident_store.py     # Persistent incident storage
-│       ├── src/
-│       │   ├── log_parser.py     # Log parsing engine
-│       │   ├── pattern_analyzer.py
-│       │   ├── rule_detector.py
-│       │   ├── advanced_correlator.py  # Cross-source correlation
-│       │   ├── bedrock_enhancer.py     # AWS Bedrock AI integration
-│       │   └── telegram_notifier.py    # Telegram alerts
-│       ├── correlation_rules.json
-│       ├── Dockerfile
-│       ├── supervisord.conf
-│       └── crontab               # Automated analysis schedule
+├── 📂 AI-Agent-RCA/              # AI Root Cause Analysis Agent
+│   ├── main.py                   # CLI test runner
+│   ├── api.py                    # FastAPI webhook (SNS/CloudWatch)
+│   ├── tools.py                  # LangChain tools (CloudWatch, correlator)
+│   ├── agent_models.py           # LLM model selector by phase
+│   ├── cloudwatch_client.py      # CloudWatch Logs API client
+│   ├── incident_store.py         # JSON-based incident persistence
+│   ├── correlation_rules.json    # Cross-source correlation rules
+│   ├── graph/                    # LangGraph state machine
+│   │   ├── builder.py            # Graph assembly & compilation
+│   │   ├── nodes.py              # Node logic (think, tool, findings, etc.)
+│   │   └── conditions.py         # Conditional edges
+│   ├── schemas/                  # Pydantic state & data models
+│   ├── contexts/                 # Context engineering (prompt composition)
+│   │   ├── composer.py           # Multi-layer prompt composer
+│   │   ├── registry.py           # Context block registry
+│   │   ├── system/               # System-level prompts (YAML)
+│   │   ├── domain/               # Domain knowledge prompts
+│   │   ├── task/                  # Task-specific prompts
+│   │   ├── interaction/          # Feedback loop prompts
+│   │   └── response/             # Output format prompts
+│   ├── cmdb/                     # Infrastructure topology (CMDB)
+│   └── src/                      # Processing modules
+│       ├── log_parser.py         # Multi-format log parser
+│       ├── pattern_analyzer.py   # Error pattern clustering
+│       ├── advanced_correlator.py # Cross-source event correlation
+│       └── telegram_notifier.py  # Telegram alert sender
 │
 ├── 📂 scripts/
 │   ├── deploy_all.sh             # Full deployment script
@@ -189,13 +206,8 @@ terraform-for-project1/
 │   └── database/
 │       └── deploy_db.sh          # Database deployment
 │
-├── 📂 docs/
-│   └── DEPLOYMENT_GUIDE.md       # Detailed deployment guide
-│
-├── AI_SYSTEM_EXPLAINED.md        # AI system architecture deep-dive
 ├── DEPLOYMENT_COMPLETE_GUIDE.md  # Complete deployment instructions
 ├── PROJECT_SUMMARY.md            # Project summary & status
-├── review_report.md              # Architecture review report
 └── README.md                     # ← Bạn đang đây
 ```
 
@@ -203,38 +215,59 @@ terraform-for-project1/
 
 ## 📦 Ứng dụng
 
-### 1. 🎓 QLSV — Student Management System (Web Tier)
+### 1. 🛍️ H&M Clothing Store (Web Tier)
 
-Hệ thống quản lý sinh viên với 3 roles: Admin, Giảng viên, Sinh viên.
-
-| Feature | Mô tả |
-|---------|--------|
-| Quản lý sinh viên | CRUD sinh viên, lớp học |
-| Quản lý giảng viên | Phân công môn học |
-| Đăng ký môn học | Sinh viên đăng ký online |
-| Quản lý điểm số | Nhập/xem điểm theo môn |
-| Phân quyền | 3 roles với permissions khác nhau |
-
-**Công nghệ:** PHP + Apache + MySQL (Docker container)
-**Database:** 6 tables — roles, users, classes, students, enrollments, grades
-**Tài khoản mặc định:** `admin` / `123@`
-
-### 2. 🤖 AI Log Analyzer (App Tier)
-
-Hệ thống phân tích log bảo mật thông minh sử dụng AWS Bedrock (Claude AI).
+Ứng dụng e-commerce thời trang H&M full-stack.
 
 | Feature | Mô tả |
 |---------|--------|
-| Multi-source Analysis | Phân tích 9 CloudWatch Log Groups đồng thời |
-| AI-powered RCA | Root Cause Analysis với phương pháp 5 Why |
-| Cross-source Correlation | Tương quan events giữa VPC Flow, CloudTrail, Application logs |
-| Attack Detection | Phát hiện DoS, SQL Injection, Brute Force, Port Scanning |
-| MITRE ATT&CK Mapping | Phân loại theo framework MITRE ATT&CK |
-| Telegram Alerts | Cảnh báo real-time khi phát hiện tấn công |
-| Automated Analysis | Tự động phân tích mỗi 5 phút (cron + supervisord) |
-| Interactive Dashboard | Streamlit UI với search, filter, drill-down |
+| Duyệt sản phẩm | Hiển thị sản phẩm theo danh mục (Men, Women, Kids, etc.) |
+| Giỏ hàng | Thêm/xóa sản phẩm, cập nhật số lượng |
+| Đặt hàng | Checkout flow hoàn chỉnh |
+| Quản lý Admin | Dashboard quản lý sản phẩm, đơn hàng |
+| Phân quyền | 2 roles: Admin, Customer |
+| Security Logging | HTTP access logs (Apache format) + application event logs (JSON) |
 
-**Công nghệ:** Python + Streamlit + AWS Bedrock + Docker + supervisord
+**Công nghệ:** React 18 + Tailwind CSS + Node.js Express + MySQL (Docker)
+**Database:** 6 tables — roles, users, categories, products, orders, order_items
+**Tài khoản mặc định:** `admin` / `123@`, `customer01-03` / `123@`
+
+> 📖 Xem chi tiết tại [hm-store/README.md](hm-store/README.md)
+
+---
+
+### 2. 🤖 AI Agent RCA (App Tier)
+
+Agent AI tự chủ thực hiện Root Cause Analysis sử dụng **LangGraph** (ReAct loop) với **AWS Bedrock** (Claude AI).
+
+| Feature | Mô tả |
+|---------|--------|
+| Event-driven | Nhận CloudWatch Alarms qua SNS → FastAPI webhook |
+| LangGraph Agent | Investigation loop: Hypothesis → Tool → Findings → Validate |
+| Context Engineering | YAML-based composable prompt system (5 layers) |
+| Tool-use | 3 tools: `query_cloudwatch_logs`, `analyze_log_patterns`, `check_cross_correlation` |
+| Structured Output | Pydantic-enforced JSON responses cho mọi node |
+| CMDB Integration | System topology awareness cho accurate RCA |
+| Telegram Alerts | Real-time notifications khi phát hiện incident |
+| Incident Store | JSON-based persistence cho investigation history |
+
+#### LangGraph Investigation Flow
+
+```
+START → Context Enrichment → Think (Hypothesis)
+                                ↓
+                            Tool Node ──── (no tool) ───→ Validate
+                                ↓
+                          Findings Node
+                                ↓
+                          Validate Node
+                           ↙         ↘
+                    (continue)      (final)
+                        ↓              ↓
+                      Think        Conclusion → END
+```
+
+**Công nghệ:** Python + LangGraph + LangChain + FastAPI + AWS Bedrock + Docker
 
 ---
 
@@ -247,51 +280,12 @@ Hệ thống thu thập logs từ **9 CloudWatch Log Groups**:
 | 1 | `/aws/vpc/flowlogs` | VPC | Network traffic (ACCEPT/REJECT) |
 | 2 | `/aws/cloudtrail/logs` | CloudTrail | API activity |
 | 3 | `/aws/ec2/web-tier/system` | Web EC2 | System logs (messages, secure) |
-| 4 | `/aws/ec2/web-tier/httpd` | Web EC2 | Apache access & error logs |
-| 5 | `/aws/ec2/web-tier/application` | Web EC2 | PHP application logs |
+| 4 | `/aws/ec2/web-tier/httpd` | Web EC2 | Apache-format access logs (từ Node.js stdout) |
+| 5 | `/aws/ec2/web-tier/application` | Web EC2 | Express application logs (JSON) |
 | 6 | `/aws/ec2/app-tier/system` | App EC2 | System logs |
-| 7 | `/aws/ec2/app-tier/streamlit` | App EC2 | Streamlit application logs |
+| 7 | `/aws/ec2/app-tier/streamlit` | App EC2 | AI Agent application logs |
 | 8 | `/aws/rds/mysql/error` | RDS | MySQL error logs |
 | 9 | `/aws/rds/mysql/slowquery` | RDS | Slow query logs |
-
----
-
-## 🧠 AI Log Analysis Pipeline
-
-```
-Raw Logs (9 sources)
-     │
-     ▼
-┌─────────────────────┐
-│  Layer 1: Parsing   │  Log Parser → Pattern Analyzer → Noise Reduction (99.5%)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Layer 2: Correlate │  Cross-source Correlation → Timeline Builder → Rule Engine
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Layer 3: AI (RCA)  │  Context Builder → AWS Bedrock (Claude) → Global RCA
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│     Outputs         │  Incident Story │ Root Cause │ MITRE ATT&CK │ Telegram Alert
-└─────────────────────┘
-```
-
-### AI Capabilities
-
-- **Incident Story / Timeline** — Câu chuyện tấn công theo trình tự thời gian
-- **Root Cause Analysis (5 Why)** — Phân tích nguyên nhân gốc rễ
-- **Control Gap Identification** — Xác định lỗ hổng bảo mật
-- **MITRE ATT&CK Mapping** — Phân loại tactics & techniques
-- **Immediate Action Recommendations** — Đề xuất xử lý kèm AWS CLI commands
-- **Severity & Confidence Scoring** — Đánh giá mức độ nghiêm trọng
-
-> 📖 Xem chi tiết tại [AI_SYSTEM_EXPLAINED.md](AI_SYSTEM_EXPLAINED.md)
 
 ---
 
@@ -348,7 +342,7 @@ cd ../scripts/
 
 ## 🌐 Truy cập ứng dụng
 
-### Web QLSV (Public)
+### H&M Store (Public)
 
 ```bash
 # Lấy ALB DNS
@@ -356,26 +350,28 @@ cd environments/dev/
 terraform output alb_dns_name
 
 # Truy cập
-http://<ALB-DNS>/qlsv
+http://<ALB-DNS>/
 ```
 
 | Role | Username | Password |
 |------|----------|----------|
 | Admin | `admin` | `123@` |
-| Giảng viên | `gv01`, `gv02`, `gv03` | `123@` |
-| Sinh viên | `sv01` → `sv10` | `123@` |
+| Customer | `customer01`, `customer02`, `customer03` | `123@` |
 
-### AI Log Analyzer (Private — SSM Port Forwarding)
+### AI Agent RCA (Private — SSM Port Forwarding)
 
 ```bash
 # Port forwarding qua SSM
 aws ssm start-session \
     --target <instance-id> \
     --document-name AWS-StartPortForwardingSession \
-    --parameters '{"portNumber":["8501"],"localPortNumber":["8501"]}'
+    --parameters '{"portNumber":["8000"],"localPortNumber":["8000"]}'
 
-# Truy cập
-http://localhost:8501
+# Test API
+curl http://localhost:8000/api/status
+
+# Trigger test alert
+curl -X POST http://localhost:8000/api/test-alert
 ```
 
 ---
@@ -412,7 +408,7 @@ http://localhost:8501
 - ✅ Secrets qua SSM Parameter Store
 
 ### Application Security
-- ✅ Password hashing (SHA256)
+- ✅ Password hashing (SHA256 + salt)
 - ✅ Prepared statements (chống SQL Injection)
 - ✅ Session security
 - ✅ Input validation
@@ -421,60 +417,8 @@ http://localhost:8501
 - ✅ 9 CloudWatch Log Groups
 - ✅ VPC Flow Logs
 - ✅ CloudTrail (API audit)
-- ✅ AI-powered threat detection (tự động mỗi 5 phút)
+- ✅ AI Agent tự động investigate khi alarm trigger
 - ✅ Telegram alerts real-time
-
----
-
-## 🔧 Troubleshooting
-
-### Kiểm tra log groups
-```bash
-./scripts/check_logs.sh
-```
-
-### Kiểm tra infrastructure
-```bash
-cd environments/dev/
-terraform show
-terraform state list
-```
-
-### Kiểm tra ứng dụng
-```bash
-# Ansible inventory
-cd ansible/
-ansible-inventory -i inventory/aws_ec2.yml --list
-
-# SSH vào instance qua SSM
-aws ssm start-session --target <instance-id>
-
-# Kiểm tra Docker containers
-sudo docker ps
-sudo docker logs <container-id>
-```
-
-### Kiểm tra CloudWatch Agent
-```bash
-sudo systemctl status amazon-cloudwatch-agent
-sudo tail -f /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
-```
-
-> 📖 Xem thêm tại phần Troubleshooting trong [DEPLOYMENT_COMPLETE_GUIDE.md](DEPLOYMENT_COMPLETE_GUIDE.md#-troubleshooting)
-
----
-
-## 📚 Tài liệu tham khảo
-
-| Tài liệu | Mô tả |
-|-----------|--------|
-| [DEPLOYMENT_COMPLETE_GUIDE.md](DEPLOYMENT_COMPLETE_GUIDE.md) | Hướng dẫn deploy chi tiết từng bước |
-| [AI_SYSTEM_EXPLAINED.md](AI_SYSTEM_EXPLAINED.md) | Giải thích chi tiết hệ thống AI analysis |
-| [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) | Tổng quan project & status |
-| [review_report.md](review_report.md) | Báo cáo review kiến trúc DevSecOps |
-| [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Deployment guide bổ sung |
-| [Web-Project-1/README.md](Web-Project-1/README.md) | Tài liệu ứng dụng QLSV |
-| [AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui/README.md](AI_Log_Analysis-Project-1/bedrock-log-analyzer-ui/README.md) | Tài liệu AI Log Analyzer |
 
 ---
 
@@ -484,14 +428,14 @@ sudo tail -f /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log
 |--------|-------|
 | **Setup Time** | ~30-40 phút |
 | **AWS Resources** | 50+ resources |
-| **Lines of Code** | 5000+ (Terraform + Ansible + Apps) |
+| **AI Architecture** | LangGraph ReAct Agent |
 | **Log Sources** | 9 CloudWatch Log Groups |
-| **AI Analysis Speed** | ~15-30 giây |
+| **Agent Tools** | 3 (query, analyze, correlate) |
+| **Context Layers** | 5 (system, domain, task, interaction, response) |
 | **Availability** | 99.9% (Multi-AZ) |
-| **Automated Analysis** | Mỗi 5 phút (cron) |
 
 ---
 
 <p align="center">
-  <b>Made with ❤️ using Terraform + Ansible + AWS Bedrock</b>
+  <b>Made with ❤️ using Terraform + Ansible + LangGraph + AWS Bedrock</b>
 </p>

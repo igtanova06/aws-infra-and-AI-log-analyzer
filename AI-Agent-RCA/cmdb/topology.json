@@ -1,0 +1,53 @@
+{
+  "infrastructure_nodes": [
+    {
+      "name": "Apache Web Server Instance",
+      "ip": "10.0.1.10",
+      "role": "web-tier",
+      "services": ["apache2"]
+    },
+    {
+      "name": "Application Server Instance",
+      "ip": "10.0.2.20",
+      "role": "app-tier",
+      "services": ["streamlit-app"]
+    },
+    {
+      "name": "Database Instance",
+      "ip": "10.0.3.50",
+      "role": "db-tier",
+      "services": ["postgresql-rds"]
+    }
+  ],
+  "services": [
+    {
+      "name": "apache2",
+      "port": 80,
+      "protocol": "HTTP",
+      "depends_on": ["streamlit-app"],
+      "log_groups": ["/aws/ec2/apache-access", "/aws/ec2/apache-error"],
+      "description": "Handles public web traffic and proxies requests to the Application tier."
+    },
+    {
+      "name": "streamlit-app",
+      "port": 8501,
+      "protocol": "HTTP",
+      "depends_on": ["postgresql-rds"],
+      "log_groups": ["/aws/ec2/application-logs"],
+      "description": "Core Streamlit business logic application."
+    },
+    {
+      "name": "postgresql-rds",
+      "port": 5432,
+      "protocol": "PostgreSQL",
+      "depends_on": [],
+      "log_groups": ["/aws/rds/postgresql-error", "/aws/rds/postgresql-slowquery"],
+      "description": "Primary relational database store for application data."
+    }
+  ],
+  "network_zones": {
+    "public_subnet": ["10.0.1.0/24"],
+    "private_app_subnet": ["10.0.2.0/24"],
+    "private_db_subnet": ["10.0.3.0/24"]
+  }
+}

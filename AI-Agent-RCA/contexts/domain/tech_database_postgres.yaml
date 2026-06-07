@@ -1,0 +1,20 @@
+name: database_postgres
+layer: domain
+priority: 75
+conditions:
+  symptoms_include: database
+content: |
+  # PostgreSQL Domain Knowledge
+  
+  ## Common Incident Patterns
+  
+  Connection issues:
+  - Pool exhaustion: max_connections reached
+  - Long-running transactions holding connections
+  - Connection leaks in application code
+  
+  Performance issues:
+  - Missing indexes causing seq scans
+  - Lock contention (row locks, table locks)
+  - Bloated tables needing VACUUM
+  - Slow queries without proper indexing

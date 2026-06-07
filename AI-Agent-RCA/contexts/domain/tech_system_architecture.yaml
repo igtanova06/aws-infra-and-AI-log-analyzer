@@ -1,0 +1,5 @@
+name: tech_system_architecture
+layer: domain
+priority: 70
+content: |
+  {{system_architecture}}

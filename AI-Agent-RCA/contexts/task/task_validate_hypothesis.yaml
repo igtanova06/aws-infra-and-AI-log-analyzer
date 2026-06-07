@@ -1,0 +1,76 @@
+name: task_validate_hypothesis
+layer: task
+priority: 80
+content: |
+  # Current Task: Validate Hypothesis
+
+  ## Objective
+  Validate hypothesis based on classified findings
+
+  ## Hypothesis
+  {{hypothesis}}
+
+  ## Current Findings
+  {{current_findings}}
+
+  ## Tasks
+  1. Correlate current_findings with investigation_history
+  2. Check for shared symptoms (same finding in multiple hypotheses)
+  3. Evaluate evidence strength based on finding type
+  4. Calculate confidence with penalties/bonuses
+  5. Conclude hypothesis status
+
+  ## Evidence Strength by Finding Type
+
+  | Finding Type | Evidence Type | Base Confidence | Max Confidence |
+  |--------------|---------------|-----------------|----------------|
+  | ROOT_CAUSE | DIRECT_CAUSAL | 0.80 | 0.95 |
+  | INTERMEDIATE | STRONG_CORRELATION | 0.60 | 0.70 |
+  | SYMPTOM | SYMPTOM_OBSERVED | 0.35 | 0.50 |
+
+  ## Confidence Adjustments
+
+  ### Penalties
+  | Condition | Penalty |
+  |-----------|---------|
+  | Finding is SYMPTOM only (no ROOT_CAUSE) | -0.25 |
+  | Same finding appears in other hypotheses | -0.15 |
+  | Finding is not actionable | -0.15 |
+  | Missing causal chain explanation | -0.20 |
+  | Cannot explain "what changed" | -0.15 |
+  | Single source only | -0.10 |
+  | **ROOT_CAUSE finding not relevant to hypothesis** | **-0.30** |
+
+  ### Bonuses
+  | Condition | Bonus |
+  |-----------|-------|
+  | Multiple sources confirm | +0.10 |
+  | Complete causal chain with timing | +0.10 |
+  | Finding unique to this hypothesis | +0.05 |
+
+  ## Hypothesis Status
+
+  | Status | Condition |
+  |--------|-----------|
+  | VALIDATE | ROOT_CAUSE or INTERMEDIATE finding supports hypothesis |
+  | INVALIDATE | Evidence contradicts hypothesis |
+  | INCONCLUSIVE | Only SYMPTOM findings OR no relevant data |
+
+  ## Shared Symptom Detection
+  If same finding validates multiple hypotheses:
+  - This finding = SYMPTOM, not root cause
+  - Apply -0.15 penalty
+  - Flag: "Need deeper investigation for actual root cause"
+
+  ## Rules
+  - SYMPTOM findings alone → max confidence 0.50, status = INCONCLUSIVE
+  - Finding not actionable → max confidence 0.70
+  - DON'T hallucinate - conclusion based ONLY on provided findings
+  - Always cite exact numbers/metrics from findings
+  - Never use vague terms without specific data
+  - **Only ROOT_CAUSE with `relevant_to_hypothesis=true` can VALIDATE hypothesis**
+  - **ROOT_CAUSE for different hypothesis → treat as SYMPTOM for current hypothesis**
+
+  ## NOTES
+  Confidence reflects EVIDENCE QUALITY, not hypothesis plausibility.
+  Error messages confirm problem EXISTS, not WHY it happened.

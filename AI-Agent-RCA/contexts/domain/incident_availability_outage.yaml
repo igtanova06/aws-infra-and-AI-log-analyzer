@@ -1,0 +1,51 @@
+name: incident_availability_outage
+layer: domain
+priority: 80
+content: |
+  # Incident Type: Availability Outage
+  
+  ## Characteristics
+  - Service completely unavailable
+  - HTTP 5xx errors or connection failures
+  - Health checks failing
+  - May be total or partial outage
+  
+  ## Investigation Pattern
+  
+  1. Confirm the outage scope
+     - Which services are down?
+     - Total outage or partial?
+     - When did it start?
+  
+  2. Check infrastructure first
+     - Are pods/containers running?
+     - Network connectivity?
+     - DNS resolution?
+     - Load balancer health?
+  
+  3. Check application state
+     - Application logs for crash reason
+     - Dependency connectivity
+     - Resource exhaustion
+  
+  4. Identify the trigger
+     - Deployment correlation?
+     - Infrastructure event?
+     - Traffic spike?
+     - Cascading failure?
+  
+  ## Common Root Causes
+  
+  - Deployment introduced crash bug
+  - OOM killed containers
+  - Database connection exhaustion
+  - Certificate expiration
+  - DNS failure
+  - Cascading failure from dependency
+  
+  ## Key Checks
+  
+  - Pod/container status and restarts
+  - Recent deployments timeline
+  - Error logs at crash time
+  - Dependency health

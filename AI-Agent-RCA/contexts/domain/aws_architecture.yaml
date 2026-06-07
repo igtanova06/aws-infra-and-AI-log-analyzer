@@ -1,0 +1,5 @@
+name: aws_architecture
+layer: domain
+priority: 70
+content: |
+  {{system_architecture}}

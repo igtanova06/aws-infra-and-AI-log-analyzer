@@ -1,0 +1,44 @@
+name: task_select_tool
+layer: task
+priority: 70
+content: |
+  # Current Task: Tool Selection for Hypothesis Validation
+
+   ## Objective
+    Select the BEST tool to validate/invalidate the hypothesis. Choose NO_TOOL if appropriate.
+
+   ## Hypothesis need validate
+   {{hypothesis}}
+
+   ## Task
+    1. Read hypothesis category and trigger
+    2. Review investigation history for EXISTING evidence (including from OTHER hypothesis investigations)
+    3. Check if existing evidence ALREADY validates/invalidates this hypothesis
+    4. Check if available tools are SUITABLE for this hypothesis category
+    5. Identify evidence GAPS - what is still UNKNOWN?
+    6. Select tool ONLY if it fills an evidence gap with NEW, RELEVANT data
+   
+   ## Rules
+  1. (CRITICAL) Check existing evidence FIRST - cross-reference ALL hypotheses in history
+  2. (CRITICAL) Match tool to hypothesis category:
+    - Configuration/Application → log_pattern, trace_analysis (NOT service_health)
+    - Resource/Infrastructure → service_health, trace_analysis (NOT log_pattern)
+  3. SELECT ONLY ONE TOOL
+  4. NEVER repeat tool + args combination from history
+  5. NO_TOOL is valid when:
+    - Evidence already sufficient (confidence ≥ 0.8) → VALIDATE/INVALIDATE
+    - No suitable tool for category → INCONCLUSIVE
+    - All relevant tools exhausted → INCONCLUSIVE
+
+   ## Your Decision
+   Think step-by-step:
+    1. What evidence do I ALREADY have? (scan ALL hypotheses in history)
+    2. Does existing evidence VALIDATE or INVALIDATE this hypothesis?
+      - If YES → NO_TOOL
+    3. Is any available tool SUITABLE for this hypothesis category?
+      - If NO → NO_TOOL
+    4. What evidence GAPS remain?
+    5. Which tool provides NEW data to fill these gaps?
+    6. Is this tool + args already used?
+      - If YES → NO_TOOL or different args
+      - If NO → Proceed

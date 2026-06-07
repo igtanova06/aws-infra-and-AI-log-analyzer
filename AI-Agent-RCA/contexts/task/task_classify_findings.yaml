@@ -1,0 +1,53 @@
+name: task_classify_findings
+layer: task
+priority: 70
+content: |
+  # Current Task: Get Information
+
+  ## Objective
+  Extract and classify findings from Tool_Results
+
+  ## Hypothesis
+  {{hypothesis}}
+
+  ## Tool Results
+  {{tool_results}}
+
+  ## Tasks
+  1. Extract all relevant information from Tool_Results
+  2. Classify each finding using Depth Test and Actionability Test
+  3. Check if finding is relevant to current hypothesis
+  4. Output structured findings with classification
+
+  ## Finding Classification
+
+  | Type | Definition | Example |
+  |------|------------|---------|
+  | SYMPTOM | Error/exception observed, can ask "WHY?" | "RPC failed 990 times", "timeout" |
+  | INTERMEDIATE | Explains mechanism, can still trace deeper | "Service calling unimplemented endpoint" |
+  | ROOT_CAUSE | Actionable, cannot trace deeper | "Feature flag X enabled" |
+
+  ## Classification Tests
+
+  ### Depth Test
+  Ask: "Can I ask WHY this happened?"
+  - YES → SYMPTOM or INTERMEDIATE
+  - NO (reached actionable item) → ROOT_CAUSE
+
+  ### Actionability Test
+  Ask: "Can engineer FIX this directly?"
+  - "RPC error 990 times" → NO (not actionable)
+  - "Feature flag enabled" → YES (can disable)
+
+  ### Relevance Test
+  Ask: "Does this finding SUPPORT the current hypothesis?"
+  - YES → Classify normally
+  - NO (supports different root cause) → Mark `relevant_to_hypothesis=false`
+
+  ## Rules
+  - Insight MUST be Data-Driven and Tool_Result-Driven (DON'T hallucinate)
+  - Never use vague terms (high/low/significant) without specific data
+  - Error messages alone = SYMPTOM, not ROOT_CAUSE
+  - Always cite exact numbers/metrics from tool_results
+  - **Finding MUST come from tool_results, NOT from hypothesis description**
+  - **ROOT_CAUSE must be relevant to current hypothesis being validated**

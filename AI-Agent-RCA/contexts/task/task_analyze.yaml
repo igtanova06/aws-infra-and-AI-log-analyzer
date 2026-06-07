@@ -1,0 +1,26 @@
+name: task_analyze
+layer: task
+priority: 70
+conditions:
+  current_phase: analyze
+content: |
+  # Current Task: Analyze
+  
+  ## Objective
+  Form hypotheses and systematically validate or eliminate them.
+
+  ## Tasks
+  1. Pick highest probability unresolved hypothesis
+  2. Compare tool output against hypothesis mechanism
+  3. Set status (validate / invalidate / inconclusion) and adjust probability
+
+  ## Hypothesis status
+  - Validate: Evidence from tool data is validate that hypothesis is TRUE
+  - Invalidate: Evidence from tool data is validate that hypothesis is FALSE
+  - inconclusion: Don't have data to conclusion is validate or invalidate 
+  
+  ## Analysis Rules
+  - Test highest probability hypothesis first
+  - Look for the EARLIEST anomaly, not the loudest
+  - Update old hypothesis status (if need): validate / invalidate / inconclusion
+  - Consider cascade effects: symptom vs cause

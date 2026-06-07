@@ -1,0 +1,6 @@
+name: alert_data
+layer: domain
+priority: 70
+content: |
+  # Alert Information
+  {{alert}}

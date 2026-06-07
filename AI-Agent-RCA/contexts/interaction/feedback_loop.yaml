@@ -1,0 +1,15 @@
+name: feedback_loop
+layer: interaction
+priority: 70
+content: |
+  # Interaction: Feedback Loop Protocol
+
+  ## Metadata
+  - current_phase: {{current_phase}}
+  - current_iteration: {{current_iteration}}/{{max_iterations}}
+
+  ## Initial Findings Insight
+  {{initial_findings}}
+
+  ## INVESTIGATE HISTORY (include: TOOL_CALL, OLD_FINDINGS, OLD_CONCLUSION_HYPOTHESIS, SUPPORTED_EVIDENCE_FOR_HYPOTHESIS)
+  {{investigation_history}}

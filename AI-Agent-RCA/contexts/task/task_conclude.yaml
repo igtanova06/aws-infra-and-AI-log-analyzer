@@ -1,0 +1,75 @@
+name: task_conclude
+layer: task
+priority: 70
+conditions:
+  current_phase: conclude
+content: |
+  # Current Task: Conclude
+  
+  ## Objective
+  
+  Conclusioin RootCause from Initial_Findings and Investigation_History
+
+  ## Initial Findings Insight
+  {{initial_findings}}
+
+  ## Investiation History
+  {{investigation_history}}
+
+  ## Tasks
+  Provide a comprehensive root cause analysis with:
+
+  1. **Root Cause Conclusion**
+    - Clear statement of the root cause
+    - Affected service(s) and components
+    - Impact scope (upstream/downstream services affected)
+
+  2. **Supporting Evidence**
+
+    **A. Initial Analysis (từ Alert & Architecture):**
+    
+    **Alert Insights:**
+    - What key signals from the alert triggered investigation?
+    - What initial hypotheses can be derived from alert metadata (error codes, affected service, timing, severity)?
+    - What does the alert pattern suggest about the failure mode?
+    
+    **Architecture Insights:**
+    - What dependencies/relationships are relevant based on the affected service?
+    - What potential failure points exist in the service topology?
+    - How does architecture context narrow down investigation scope?
+    
+    **Initial Investigation Direction:**
+    - Based on alert + architecture analysis, what was the prioritized investigation path?
+    - Why were certain hypotheses prioritized over others?
+
+    **B. Investigation Evidence Chain:**
+    
+    For EACH investigation iteration, present evidence in this exact structure:
+    
+    **Iteration N:**
+    - **Hypothesis:** What was the hypothesis being tested?
+    - **Tool Selection Rationale:** Why was this specific tool chosen given the hypothesis and available context?
+    - **Evidence:** What did the tool results reveal? How does this support or refute the hypothesis?
+    - **Next Step Reasoning:** How did this evidence inform the next iteration? (skip for final iteration)
+    
+    **C. Evidence Synthesis:**
+    - How does the combined evidence chain (Alert → Architecture → Tool Results) lead to the root cause conclusion?
+    - What alternative hypotheses were ruled out and why?
+
+  3. **Confidence Assessment**
+    - Overall confidence level (0.0-1.0)
+    - Justification based on:
+      - Evidence consistency across iterations
+      - Evidence diversity (different data sources)
+      - Absence of contradicting evidence
+  
+  ## Root Cause Statement Requirements
+  A valid root cause statement must:
+  - Be specific and testable
+  - Explain ALL observed symptoms
+  - Include the trigger (what changed)
+  - Not be a symptom itself
+
+  ## Rules
+  - DON'T hallucination, ALWAYS based investigation_history and initial_findings
+  - Be specific and data-driven

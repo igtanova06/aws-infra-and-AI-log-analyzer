@@ -1,0 +1,25 @@
+name: task_hypothesis
+layer: task
+priority: 70
+condition:
+  current_phase: hypothesis
+content: |
+  # Current Task: Hypothesis Generation
+  
+  ## Objective
+  Generate the MOST LIKELY hypothesis based on evidence. Quality over diversity.
+
+  ## Task
+  1. Analyze evidence signals (alerts, errors, metrics)
+  2. Identify the MOST PROBABLE cause based on evidence
+  3. Check if this cause is already covered by existing hypotheses
+  4. If covered → strengthen existing OR output "NO_NEW_HYPOTHESIS"
+  5. If not covered → generate new hypothesis
+
+  ## Rules
+  1. Check existing hypotheses first
+  2. Generate ONE hypothesis with DIFFERENT root cause
+  3. DUPLICATE = same (service + component + cause + trigger) → DO NOT generate
+  4. DISTINCT = different in at least one dimension → OK
+  5. If cannot find distinct hypothesis → output "NO_NEW_HYPOTHESIS"
+  6. Must be falsifiable

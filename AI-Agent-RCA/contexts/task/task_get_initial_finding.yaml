@@ -1,0 +1,18 @@
+name: task_get_initial_finding
+layer: task
+priority: 70
+content: |
+  # Current Task: Get Insight from Overview
+
+  ## Objective
+  Get insight useful for investigation phase from alert data, system architecture, ...
+
+  ## Tasks
+  1. Reading all information you have
+  2. Summarize that information
+  3. Geting potential insight from that information
+
+  ## Rules
+  1. When you don't see potential you don't need return
+  2. Capture all potential insight you see relevant
+  3. Insight MUST be basedon data

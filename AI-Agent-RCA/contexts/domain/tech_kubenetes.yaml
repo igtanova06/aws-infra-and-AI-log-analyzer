@@ -1,0 +1,36 @@
+name: kubernetes
+layer: domain
+priority: 75
+conditions:
+  infrastructure: kubernetes
+content: |
+  # Kubernetes Domain Knowledge
+  
+  ## Common Incident Patterns
+  
+  Pod failures:
+  - OOMKilled: Memory limit exceeded
+  - CrashLoopBackOff: Container repeatedly failing
+  - ImagePullBackOff: Cannot pull container image
+  - Evicted: Node resource pressure
+  
+  Networking issues:
+  - Service endpoint not ready
+  - Network policy blocking traffic
+  - DNS resolution failures
+  - Ingress misconfiguration
+  
+  ## Investigation Approach
+  
+  1. Check pod status and recent events
+  2. Review container logs for crash reasons
+  3. Check resource utilization vs limits
+  4. Verify service endpoints and selectors
+  5. Check network policies if connectivity issue
+  
+  ## Key Metrics to Query
+  
+  - container_memory_usage_bytes
+  - container_cpu_usage_seconds_total
+  - kube_pod_container_status_restarts_total
+  - kube_pod_status_phase

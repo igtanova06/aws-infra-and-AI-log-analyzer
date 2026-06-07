@@ -1,0 +1,12 @@
+# contexts/response/response_structured.yaml
+name: response_structured
+layer: response
+priority: 50
+conditions:
+  output_type: structured
+content: |
+  # Response Format: Structured Output
+  
+  Output must conform to the provided Pydantic schema.
+  Do not include explanatory text outside the schema.
+  All fields are required unless marked Optional.

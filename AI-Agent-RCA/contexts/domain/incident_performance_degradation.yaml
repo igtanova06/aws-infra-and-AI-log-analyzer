@@ -1,0 +1,51 @@
+name: incident_performance_degradation
+layer: domain
+priority: 80
+content: |
+  # Incident Type: Performance Degradation
+  
+  ## Characteristics
+  - Service responding but slower than normal
+  - Latency increase (p50, p95, p99)
+  - Possible timeout errors
+  - May affect subset of requests
+  
+  ## Investigation Pattern
+  
+  1. Quantify the degradation
+     - What's the baseline latency?
+     - Current latency vs baseline?
+     - Which percentiles affected?
+  
+  2. Scope the impact
+     - All endpoints or specific ones?
+     - All users or specific segments?
+     - Correlation with geography/time?
+  
+  3. Identify the bottleneck
+     - Application processing time?
+     - Database query time?
+     - External API latency?
+     - Network latency?
+  
+  4. Find the trigger
+     - Traffic increase?
+     - Recent deployment?
+     - Dependency degradation?
+     - Resource exhaustion?
+  
+  ## Common Root Causes
+  
+  - Slow database queries (missing index, lock contention)
+  - Resource saturation (CPU, memory, connections)
+  - Downstream dependency slowdown
+  - Inefficient code (N+1 queries, memory leaks)
+  - Configuration change (cache disabled, pool size reduced)
+  
+  ## Key Metrics to Check
+  
+  - Request latency percentiles
+  - Throughput (requests/sec)
+  - Error rate
+  - Resource utilization (CPU, memory, connections)
+  - Dependency latencies

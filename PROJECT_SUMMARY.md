@@ -175,7 +175,7 @@ cd ../scripts/
 ### ✅ Đã hoàn thành
 
 **Infrastructure:**
-- [x] 2-tier architecture (Web public + App private)
+- [x] 3-tier architecture (Web public + App private + DB isolated)
 - [x] Auto Scaling Groups
 - [x] Application Load Balancer
 - [x] RDS MySQL

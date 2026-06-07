@@ -15,7 +15,7 @@
 - [Tổng quan](#-tổng-quan)
 - [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
 - [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
-- [Cấu trúc project](#-cấu-trúc-project)
+- [Cấu trúc project](#-cấu-trúc-project)docs: correct architecture description to 3-tier and detail Layer 3 Database isolation
 - [Ứng dụng](#-ứng-dụng)
 - [AI Agent RCA](#-ai-agent-rca)
 - [Log Collection & Observability](#-log-collection--observability)

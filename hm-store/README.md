@@ -1,6 +1,6 @@
 # 🛍️ H&M Clothing Store Full-Stack Web Application
 
-This folder contains the source code for a modern, high-fidelity H&M clothing store application built to replace the old PHP student management system. It is designed to work seamlessly with the existing 2-tier AWS deployment architecture and provides comprehensive logging compatible with the **AI Agent RCA** project.
+This folder contains the source code for a modern, high-fidelity H&M clothing store application built to replace the old PHP student management system. It is designed to work seamlessly with the existing 3-tier AWS deployment architecture and provides comprehensive logging compatible with the **AI Agent RCA** project.
 
 ---
 

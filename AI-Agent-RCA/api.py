@@ -50,7 +50,7 @@ class CorrelatedEventWrapper:
         ]
 
 
-def run_investigation_background(alarm_data: dict):
+async def run_investigation_background(alarm_data: dict):
     """Executes the investigation graph, writes outcome to IncidentStore, and notifies Telegram."""
     logger.info("Starting background investigation for alarm...")
     try:
@@ -58,7 +58,7 @@ def run_investigation_background(alarm_data: dict):
         state = AgentState(alert=alarm_data)
         
         # 2. Run the graph
-        final_state = INVESTIGATION_GRAPH.invoke(state)
+        final_state = await INVESTIGATION_GRAPH.ainvoke(state)
         logger.info(f"LangGraph execution finished. Loop count: {final_state.current_iteration_count}, Validations: {final_state.validation_count}")
         
         # 3. Format and save to incident store

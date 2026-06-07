@@ -27,7 +27,7 @@ async def test_rca_agent():
     initial_state = AgentState(alert=mock_alarm)
     
     try:
-        final_state = await asyncio.to_thread(INVESTIGATION_GRAPH.invoke, initial_state)
+        final_state = await INVESTIGATION_GRAPH.ainvoke(initial_state)
         
         print("\n" + "="*80)
         print("INVESTIGATION COMPLETE - FINAL ROOT CAUSE REPORT")

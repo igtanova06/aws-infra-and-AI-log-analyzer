@@ -585,14 +585,14 @@ export default function App() {
             </ul>
           </div>
           <div class="space-y-3">
-            <h4 class="font-bold text-hm-dark uppercase tracking-wider">RCA AI Agent</h4>
+            <h4 class="font-bold text-hm-dark uppercase tracking-wider">About Us</h4>
             <p class="leading-relaxed">
-              This H&amp;M storefront is fully integrated with the DevOps AIOps Root Cause Analysis tool using automated CloudWatch streaming.
+              H&amp;M is a fashion brand, offering the latest styles and inspiration for all. Happy shopping!
             </p>
           </div>
         </div>
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 pt-6 border-t border-hm-border flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
-          <p>&copy; 2026 H&amp;M Hennes &amp; Mauritz AB. Built for AI-Agent-RCA Demonstration.</p>
+          <p>&copy; 2026 H&amp;M Hennes &amp; Mauritz AB. All rights reserved.</p>
           <div class="font-bold text-hm-red tracking-widest font-serif text-lg">H&amp;M</div>
         </div>
       </footer>

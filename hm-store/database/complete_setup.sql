@@ -97,7 +97,6 @@ INSERT INTO products (product_id, name, description, price, stock, category_id, 
 (6, 'Rib-knit Mock-neck Top', 'Fitted top in soft rib-knit fabric. Mock neck, long sleeves, and a straight hem.', 499000.00, 50, 2, 'https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=500&q=80'),
 
 -- Divided category (ID: 3)
-(7, 'Printed Graphic Hoodie', 'Hoodie in sweatshirt fabric made from a cotton blend. Double-layered hood with drawstring, a kangaroo pocket, and graphic print at front.', 699000.00, 80, 3, 'https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=500&q=80'),
 (8, 'Loose Fit Cargo Pants', 'Cargo pants in woven cotton fabric. Loose fit. High waist with elasticated drawstring, zip fly with button, side pockets, and cargo pockets.', 799000.00, 40, 3, 'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=500&q=80'),
 
 -- Kids'' category (ID: 4)
@@ -124,7 +123,7 @@ CREATE TABLE orders (
 
 -- Sample orders
 INSERT INTO orders (order_id, user_id, total_amount, status, created_at) VALUES
-(1, 2, 1398000.00, 'Completed', '2026-06-05 14:32:00'),
+(1, 2, 997000.00, 'Completed', '2026-06-05 14:32:00'),
 (2, 3, 1199000.00, 'Processing', '2026-06-07 09:15:00'),
 (3, 4, 399000.00, 'Pending', '2026-06-08 00:05:00');
 
@@ -145,8 +144,7 @@ CREATE TABLE order_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO order_items (order_id, product_id, quantity, price) VALUES
--- Order 1: 1 Hoodie + 1 Canvas Shopper
-(1, 7, 1, 699000.00),
+-- Order 1: Canvas Shoppers & Sunglasses
 (1, 11, 2, 299000.00),
 (1, 12, 1, 399000.00),
 -- Order 2: 1 Denim Jacket
